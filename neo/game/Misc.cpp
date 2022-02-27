@@ -31,7 +31,7 @@ Various utility objects and functions.
 
 */
 
-#include "../idlib/precompiled.h"
+#include "../idlib/precompiled.h" // PR3Y #include "precompiled.h"
 #pragma hdrstop
 
 #include "Game_local.h"

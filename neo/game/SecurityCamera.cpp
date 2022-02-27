@@ -33,7 +33,7 @@ If you have questions concerning this license or the applicable additional terms
 
 */
 
-#include "../idlib/precompiled.h"
+#include "../idlib/precompiled.h" // PR3Y #include "precompiled.h"
 #pragma hdrstop
 
 #include "Game_local.h"
@@ -550,6 +550,7 @@ bool idSecurityCamera::Pain( idEntity *inflictor, idEntity *attacker, int damage
 	if ( fx[0] != '\0' ) {
 		idEntityFx::StartFx( fx, NULL, NULL, this, true );
 	}
+
 	return true;
 }
 

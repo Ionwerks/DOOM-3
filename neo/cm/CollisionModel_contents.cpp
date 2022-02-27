@@ -34,7 +34,7 @@ If you have questions concerning this license or the applicable additional terms
 ===============================================================================
 */
 
-#include "../idlib/precompiled.h"
+#include "../idlib/precompiled.h" // PR3Y #include "precompiled.h"
 #pragma hdrstop
 
 #include "CollisionModel_local.h"
@@ -482,7 +482,7 @@ int idCollisionModelManagerLocal::ContentsTrm( trace_t *results, const idVec3 &s
 	bool model_rotated, trm_rotated;
 	idMat3 invModelAxis, tmpAxis;
 	idVec3 dir;
-	ALIGN16( cm_traceWork_t tw );
+	ALIGN16( cm_traceWork_t tw ); // PR3Y ALIGN16( cm_traceWork_t tw; )
 
 	// fast point case
 	if ( !trm || ( trm->bounds[1][0] - trm->bounds[0][0] <= 0.0f &&
