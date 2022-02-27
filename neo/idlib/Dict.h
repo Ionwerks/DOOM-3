@@ -87,6 +87,10 @@ public:
 						// print the dict
 	void				Print() const;
 
+	//HUMANHEAD rww - detect and print differences between two idDicts, for debugging purposes
+	void				CompareArgs(const idDict &other) const;
+	//HUMANHEAD END
+
 	size_t				Allocated( void ) const;
 	size_t				Size( void ) const { return sizeof( *this ) + Allocated(); }
 

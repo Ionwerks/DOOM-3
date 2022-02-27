@@ -64,23 +64,6 @@ private:
 /*
 ===============================================================================
 
-idTarget_Show
-
-===============================================================================
-*/
-
-class idTarget_Show : public idTarget {
-public:
-	CLASS_PROTOTYPE( idTarget_Show );
-
-private:
-	void				Event_Activate( idEntity *activator );
-};
-
-
-/*
-===============================================================================
-
 idTarget_Damage
 
 ===============================================================================
@@ -124,7 +107,8 @@ class idTarget_EndLevel : public idTarget {
 public:
 	CLASS_PROTOTYPE( idTarget_EndLevel );
 
-private:
+protected:	// HUMANHEAD pdm
+	virtual	// HUMANHEAD pdm
 	void				Event_Activate( idEntity *activator );
 
 };
@@ -279,24 +263,6 @@ private:
 /*
 ===============================================================================
 
-idTarget_GiveEmail
-
-===============================================================================
-*/
-
-class idTarget_GiveEmail : public idTarget {
-public:
-	CLASS_PROTOTYPE( idTarget_GiveEmail );
-
-	void				Spawn( void );
-
-private:
-	void				Event_Activate( idEntity *activator );
-};
-
-/*
-===============================================================================
-
 idTarget_SetModel
 
 ===============================================================================
@@ -310,49 +276,6 @@ public:
 
 private:
 	void				Event_Activate( idEntity *activator );
-};
-
-
-/*
-===============================================================================
-
-idTarget_SetInfluence
-
-===============================================================================
-*/
-
-class idTarget_SetInfluence : public idTarget {
-public:
-	CLASS_PROTOTYPE( idTarget_SetInfluence );
-
-						idTarget_SetInfluence( void );
-
-	void				Save( idSaveGame *savefile ) const;
-	void				Restore( idRestoreGame *savefile );
-
-	void				Spawn( void );
-
-private:
-	void				Event_Activate( idEntity *activator );
-	void				Event_RestoreInfluence();
-	void				Event_GatherEntities();
-	void				Event_Flash( float flash, int out );
-	void				Event_ClearFlash( float flash );
-	void				Think( void );
-
-	idList<int>			lightList;
-	idList<int>			guiList;
-	idList<int>			soundList;
-	idList<int>			genericList;
-	float				flashIn;
-	float				flashOut;
-	float				delay;
-	idStr				flashInSound;
-	idStr				flashOutSound;
-	idEntity *			switchToCamera;
-	idInterpolate<float>fovSetting;
-	bool				soundFaded;
-	bool				restoreOnTrigger;
 };
 
 
@@ -388,46 +311,12 @@ public:
 	void				Save( idSaveGame *savefile ) const;
 	void				Restore( idRestoreGame *savefile );
 
-	void				Think( void );
-
 private:
 	idInterpolate<int>	fovSetting;
 
 	void				Event_Activate( idEntity *activator );
 };
 
-
-/*
-===============================================================================
-
-idTarget_SetPrimaryObjective
-
-===============================================================================
-*/
-
-class idTarget_SetPrimaryObjective : public idTarget {
-public:
-	CLASS_PROTOTYPE( idTarget_SetPrimaryObjective );
-
-private:
-	void				Event_Activate( idEntity *activator );
-};
-
-/*
-===============================================================================
-
-idTarget_LockDoor
-
-===============================================================================
-*/
-
-class idTarget_LockDoor: public idTarget {
-public:
-	CLASS_PROTOTYPE( idTarget_LockDoor );
-
-private:
-	void				Event_Activate( idEntity *activator );
-};
 
 /*
 ===============================================================================
@@ -449,7 +338,7 @@ private:
 /*
 ===============================================================================
 
-idTarget_LockDoor
+idTarget_EnableLevelWeapons
 
 ===============================================================================
 */
@@ -475,35 +364,18 @@ class idTarget_Tip : public idTarget {
 public:
 	CLASS_PROTOTYPE( idTarget_Tip );
 
-						idTarget_Tip( void );
-
+						idTarget_Tip();
 	void				Spawn( void );
-
 	void				Save( idSaveGame *savefile ) const;
 	void				Restore( idRestoreGame *savefile );
+	void				Disable();
 
 private:
-	idVec3				playerPos;
-
 	void				Event_Activate( idEntity *activator );
-	void				Event_TipOff( void );
-	void				Event_GetPlayerPos( void );
+	void				Event_CheckPlayerPos( void );
+
+	bool				bDisabled;
 };
-
-/*
-===============================================================================
-
-idTarget_GiveSecurity
-
-===============================================================================
-*/
-class idTarget_GiveSecurity : public idTarget {
-public:
-	CLASS_PROTOTYPE( idTarget_GiveSecurity );
-private:
-	void				Event_Activate( idEntity *activator );
-};
-
 
 /*
 ===============================================================================

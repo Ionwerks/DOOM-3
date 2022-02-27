@@ -38,11 +38,8 @@ If you have questions concerning this license or the applicable additional terms
 */
 
 class idSIMD_MMX : public idSIMD_Generic {
+#ifdef _WIN32
 public:
-#if defined(MACOS_X) && defined(__i386__)
-	virtual const char * VPCALL GetName( void ) const;
-
-#elif defined(_WIN32)
 	virtual const char * VPCALL GetName( void ) const;
 
 	virtual void VPCALL Memcpy( void *dst,			const void *src,		const int count );

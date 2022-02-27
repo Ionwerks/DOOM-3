@@ -364,6 +364,9 @@ int GetObstacles( const idPhysics *physics, const idAAS *aas, const idEntity *ig
 			}
 		} else if ( obEnt->IsType( idMoveable::Type ) ) {
 			// moveables are considered obstacles
+#ifdef HUMANHEAD
+		} else if ( obEnt->IsType( hhVehicle::Type ) ) {
+#endif
 		} else {
 			// ignore everything else
 			continue;
@@ -593,8 +596,8 @@ pathNode_t *BuildPathTree( const obstacle_t *obstacles, int numObstacles, const 
 	int blockingEdgeNum, blockingObstacle, obstaclePoints, bestNumNodes = MAX_OBSTACLE_PATH;
 	float blockingScale;
 	pathNode_t *root, *node, *child;
-	// gcc 4.0
-	idQueueTemplate<pathNode_t, offsetof( pathNode_t, next ) > pathNodeQueue, treeQueue;
+	idQueue(pathNode_t, next) pathNodeQueue, treeQueue;
+
 	root = pathNodeAllocator.Alloc();
 	root->Init();
 	root->pos = startPos;
@@ -894,7 +897,14 @@ bool FindOptimalPath( const pathNode_t *root, const obstacle_t *obstacles, int n
 	}
 
 	if ( !pathToGoalExists ) {
-		seekPos.ToVec2() = root->children[0]->pos;
+		//HUMANHEAD rww
+		if (!root->children[0]) {
+			seekPos.ToVec2() = root->pos;
+		}
+		else {
+			seekPos.ToVec2() = root->children[0]->pos;
+		}
+		//HUMANHEAD END
 	} else if ( !optimizedPathCalculated ) {
 		OptimizePath( root, bestNode, obstacles, numObstacles, optimizedPath );
 		seekPos.ToVec2() = optimizedPath[1];
@@ -982,7 +992,15 @@ bool idAI::FindPathAroundObstacles( const idPhysics *physics, const idAAS *aas, 
 	PrunePathTree( root, path.seekPosOutsideObstacles.ToVec2() );
 
 	// find the optimal path
+#ifdef HUMANHEAD //jsh if pitch/roll is rotated, don't change seekPos based on monster's current height 
+	if ( physics->GetAxis().ToAngles().pitch != 0.0 || physics->GetAxis().ToAngles().pitch != 0.0 ) {
+		pathToGoalExists = FindOptimalPath( root, obstacles, numObstacles, path.seekPos.z, physics->GetLinearVelocity(), path.seekPos );
+	} else {
+		pathToGoalExists = FindOptimalPath( root, obstacles, numObstacles, physics->GetOrigin().z, physics->GetLinearVelocity(), path.seekPos );
+	}
+#else
 	pathToGoalExists = FindOptimalPath( root, obstacles, numObstacles, physics->GetOrigin().z, physics->GetLinearVelocity(), path.seekPos );
+#endif
 
 	// free the tree
 	FreePathTree_r( root );
@@ -1011,7 +1029,7 @@ void idAI::FreeObstacleAvoidanceNodes( void ) {
 ===============================================================================
 */
 
-const float OVERCLIP			= 1.001f;
+//const float OVERCLIP			= 1.001f;
 const int MAX_FRAME_SLIDE		= 5;
 
 typedef struct pathTrace_s {
@@ -1457,9 +1475,20 @@ bool idAI::PredictTrajectory( const idVec3 &firePos, const idVec3 &target, float
 	if ( projectileSpeed <= 0.0f || projGravity == vec3_origin ) {
 
 		aimDir = target - firePos;
+#if HUMANHEAD // jsh - do a point trace if trace distance is large
+		if ( aimDir.LengthSqr() > CM_MAX_TRACE_DIST*CM_MAX_TRACE_DIST ) {
+			aimDir.Normalize();
+			gameLocal.clip.Translation( trace, firePos, target, NULL, mat3_identity, clipmask, ignore );	
+		} else {
+			aimDir.Normalize();
+			gameLocal.clip.Translation( trace, firePos, target, clip, mat3_identity, clipmask, ignore );
+		}
+#else
+		aimDir = target - firePos;
 		aimDir.Normalize();
 
 		gameLocal.clip.Translation( trace, firePos, target, clip, mat3_identity, clipmask, ignore );
+#endif
 
 		if ( drawtime ) {
 			gameRenderWorld->DebugLine( colorRed, firePos, target, drawtime );

@@ -228,7 +228,7 @@ public:
 					// get offset in script
 	const int		GetFileOffset( void );
 					// get file time
-	const ID_TIME_T	GetFileTime( void );
+	const unsigned int GetFileTime( void );
 					// returns the current line number
 	const int		GetLineNum( void );
 					// print an error message
@@ -251,7 +251,7 @@ private:
 	const char *	lastScript_p;			// script pointer before reading token
 	const char *	whiteSpaceStart_p;		// start of last white space
 	const char *	whiteSpaceEnd_p;		// end of last white space
-	ID_TIME_T			fileTime;				// file time
+	unsigned int	fileTime;				// file time
 	int				length;					// length of the script in bytes
 	int				line;					// current line in script
 	int				lastline;				// line before reading token
@@ -287,7 +287,7 @@ ID_INLINE const int idLexer::GetFileOffset( void ) {
 	return idLexer::script_p - idLexer::buffer;
 }
 
-ID_INLINE const ID_TIME_T idLexer::GetFileTime( void ) {
+ID_INLINE const unsigned int idLexer::GetFileTime( void ) {
 	return idLexer::fileTime;
 }
 

@@ -161,7 +161,7 @@ public:
 					// get current offset in current script
 	const int		GetFileOffset( void ) const;
 					// get file time for current script
-	const ID_TIME_T	GetFileTime( void ) const;
+	const unsigned int GetFileTime( void ) const;
 					// returns the current line number
 	const int		GetLineNum( void ) const;
 					// print an error message
@@ -262,7 +262,7 @@ ID_INLINE const int idParser::GetFileOffset( void ) const {
 	}
 }
 
-ID_INLINE const ID_TIME_T idParser::GetFileTime( void ) const {
+ID_INLINE const unsigned int idParser::GetFileTime( void ) const {
 	if ( idParser::scriptstack ) {
 		return idParser::scriptstack->GetFileTime();
 	}

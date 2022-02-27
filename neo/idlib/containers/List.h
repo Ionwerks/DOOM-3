@@ -131,7 +131,7 @@ public:
 	void			Swap( idList<type> &other );						// swap the contents of the lists
 	void			DeleteContents( bool clear );						// delete the contents of the list
 
-private:
+protected:	// HUMANHEAD
 	int				num;
 	int				size;
 	int				granularity;
@@ -835,6 +835,7 @@ ID_INLINE int idList<type>::IndexOf( type const *objptr ) const {
 
 	return index;
 }
+
 
 /*
 ================

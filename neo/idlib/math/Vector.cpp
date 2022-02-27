@@ -213,6 +213,50 @@ idMat3 idVec3::ToMat3( void ) const {
 	return mat;
 }
 
+
+// HUMANHEAD nla
+/*
+=============
+idVec3::hhToMat3
+=============
+*/
+idMat3 idVec3::hhToMat3( void ) const {
+	idVec3	left;
+	idVec3	down;
+
+	// NormalVectors actually returns left and down
+	NormalVectors( left, down );
+	return idMat3( *this, left, -down );
+}
+
+// HUMANHEAD PDM: Vector conversion to/from axis aligned direction masks (6-bit vector compression)
+int idVec3::DirectionMask() const {
+	int mask = 0;
+	for (int term=0; term<3; term++) {
+		mask += (*this)[term]<0 ? 1<<(term<<1) : (*this)[term]>0 ? 1<<((term<<1)+1) : 0;
+	}
+	return mask;
+}
+ 
+idVec3::idVec3(int directionMask) {
+	int negativeMask, positiveMask;
+	for (int term=0; term<3; term++) {
+		negativeMask = 1 << (term<<1);
+		positiveMask = 1 << ((term<<1)+1);
+		(*this)[term] = (directionMask & negativeMask) ? -1 : (directionMask & positiveMask) ? 1 : 0;
+	}
+}
+
+idVec3 idVec3::ToNormal() const {
+	float sqrLength, invLength;
+
+	sqrLength = x * x + y * y + z * z;
+	invLength = idMath::InvSqrt( sqrLength );
+	return *this * invLength;
+}
+// HUMANHEAD END
+
+
 /*
 =============
 idVec3::ToString
@@ -384,7 +428,7 @@ const char *idVec6::ToString( int precision ) const {
 //===============================================================
 
 float	idVecX::temp[VECX_MAX_TEMP+4];
-float *	idVecX::tempPtr = (float *) ( ( (int) idVecX::temp + 15 ) & ~15 );
+float *	idVecX::tempPtr = (float *) ( ( (INT_PTR) idVecX::temp + 15 ) & ~15 );
 int		idVecX::tempIndex = 0;
 
 /*

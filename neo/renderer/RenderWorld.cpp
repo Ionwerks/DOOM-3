@@ -979,6 +979,7 @@ guiPoint_t	idRenderWorldLocal::GuiTrace( qhandle_t entityHandle, const idVec3 st
 
 	pt.x = pt.y = -1;
 	pt.guiId = 0;
+	pt.frac = 1.0f; // jmarshall
 
 	if ( ( entityHandle < 0 ) || ( entityHandle >= entityDefs.Num() ) ) {
 		common->Printf( "idRenderWorld::GuiTrace: invalid handle %i\n", entityHandle );
@@ -1036,6 +1037,7 @@ guiPoint_t	idRenderWorldLocal::GuiTrace( qhandle_t entityHandle, const idVec3 st
 			pt.x = ( cursor * axis[0] ) / ( axisLen[0] * axisLen[0] );
 			pt.y = ( cursor * axis[1] ) / ( axisLen[1] * axisLen[1] );
 			pt.guiId = shader->GetEntityGui();
+			pt.frac = local.fraction; // jmarshall end
 
 			return pt;
 		}

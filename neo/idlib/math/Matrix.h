@@ -295,8 +295,8 @@ ID_INLINE idMat2 idMat2::Inverse( void ) const {
 	idMat2 invMat;
 
 	invMat = *this;
-	int r = invMat.InverseSelf();
-	assert( r );
+	//HH rww SDK - removed unnecessary variable initialization
+	invMat.InverseSelf();
 	return invMat;
 }
 
@@ -304,8 +304,8 @@ ID_INLINE idMat2 idMat2::InverseFast( void ) const {
 	idMat2 invMat;
 
 	invMat = *this;
-	int r = invMat.InverseFastSelf();
-	assert( r );
+	//HH rww SDK - removed unnecessary variable initialization
+	invMat.InverseFastSelf();
 	return invMat;
 }
 
@@ -464,6 +464,7 @@ ID_INLINE idMat3 idMat3::operator*( const idMat3 &a ) const {
 	m2Ptr = reinterpret_cast<const float *>(&a);
 	dstPtr = reinterpret_cast<float *>(&dst);
 
+#if 1
 	for ( i = 0; i < 3; i++ ) {
 		for ( j = 0; j < 3; j++ ) {
 			*dstPtr = m1Ptr[0] * m2Ptr[ 0 * 3 + j ]
@@ -473,6 +474,168 @@ ID_INLINE idMat3 idMat3::operator*( const idMat3 &a ) const {
 		}
 		m1Ptr += 3;
 	}
+#else //HUMANHEAD rww - sse test (unideal, no aligned calculation)
+	__asm {
+		//get our memory locations
+		mov			eax, m1Ptr
+		mov			ecx, m2Ptr
+		mov			edx, dstPtr
+
+	//=====iteration 1
+		//load 3 elements of mat a into sse regs
+		movss		xmm0, [eax]
+		movss		xmm1, [eax+4]
+		movss		xmm2, [eax+8]
+
+		//-----iteration 1
+		//load 3 elements of mat b into sse regs
+		movss		xmm3, [ecx]		//0 * 3 + 0
+		movss		xmm4, [ecx+12]	//1 * 3 + 0
+		movss		xmm5, [ecx+24]	//2 * 3 + 0
+		//multiply the elements
+		mulss		xmm3, xmm0
+		mulss		xmm4, xmm1
+		mulss		xmm5, xmm2
+		//add
+		addss		xmm3, xmm4
+		addss		xmm3, xmm5
+		//store result to dest
+		movss		[edx], xmm3
+
+		//-----iteration 2
+		//load 3 elements of mat b into sse regs
+		movss		xmm3, [ecx+4]	//0 * 3 + 1
+		movss		xmm4, [ecx+16]	//1 * 3 + 1
+		movss		xmm5, [ecx+28]	//2 * 3 + 1
+		//multiply the elements
+		mulss		xmm3, xmm0
+		mulss		xmm4, xmm1
+		mulss		xmm5, xmm2
+		//add
+		addss		xmm3, xmm4
+		addss		xmm3, xmm5
+		//store result to dest
+		movss		[edx+4], xmm3
+
+		//-----iteration 3
+		//load 3 elements of mat b into sse regs
+		movss		xmm3, [ecx+8]	//0 * 3 + 2
+		movss		xmm4, [ecx+20]	//1 * 3 + 2
+		movss		xmm5, [ecx+32]	//2 * 3 + 2
+		//multiply the elements
+		mulss		xmm3, xmm0
+		mulss		xmm4, xmm1
+		mulss		xmm5, xmm2
+		//add
+		addss		xmm3, xmm4
+		addss		xmm3, xmm5
+		//store result to dest
+		movss		[edx+8], xmm3
+
+	//=====iteration 2
+		//load 3 elements of mat a into sse regs
+		movss		xmm0, [eax+12]
+		movss		xmm1, [eax+16]
+		movss		xmm2, [eax+20]
+
+		//-----iteration 1
+		//load 3 elements of mat b into sse regs
+		movss		xmm3, [ecx]		//0 * 3 + 0
+		movss		xmm4, [ecx+12]	//1 * 3 + 0
+		movss		xmm5, [ecx+24]	//2 * 3 + 0
+		//multiply the elements
+		mulss		xmm3, xmm0
+		mulss		xmm4, xmm1
+		mulss		xmm5, xmm2
+		//add
+		addss		xmm3, xmm4
+		addss		xmm3, xmm5
+		//store result to dest
+		movss		[edx+12], xmm3
+
+		//-----iteration 2
+		//load 3 elements of mat b into sse regs
+		movss		xmm3, [ecx+4]	//0 * 3 + 1
+		movss		xmm4, [ecx+16]	//1 * 3 + 1
+		movss		xmm5, [ecx+28]	//2 * 3 + 1
+		//multiply the elements
+		mulss		xmm3, xmm0
+		mulss		xmm4, xmm1
+		mulss		xmm5, xmm2
+		//add
+		addss		xmm3, xmm4
+		addss		xmm3, xmm5
+		//store result to dest
+		movss		[edx+16], xmm3
+
+		//-----iteration 3
+		//load 3 elements of mat b into sse regs
+		movss		xmm3, [ecx+8]	//0 * 3 + 2
+		movss		xmm4, [ecx+20]	//1 * 3 + 2
+		movss		xmm5, [ecx+32]	//2 * 3 + 2
+		//multiply the elements
+		mulss		xmm3, xmm0
+		mulss		xmm4, xmm1
+		mulss		xmm5, xmm2
+		//add
+		addss		xmm3, xmm4
+		addss		xmm3, xmm5
+		//store result to dest
+		movss		[edx+20], xmm3
+
+	//=====iteration 3
+		//load 3 elements of mat a into sse regs
+		movss		xmm0, [eax+24]
+		movss		xmm1, [eax+28]
+		movss		xmm2, [eax+32]
+
+		//-----iteration 1
+		//load 3 elements of mat b into sse regs
+		movss		xmm3, [ecx]		//0 * 3 + 0
+		movss		xmm4, [ecx+12]	//1 * 3 + 0
+		movss		xmm5, [ecx+24]	//2 * 3 + 0
+		//multiply the elements
+		mulss		xmm3, xmm0
+		mulss		xmm4, xmm1
+		mulss		xmm5, xmm2
+		//add
+		addss		xmm3, xmm4
+		addss		xmm3, xmm5
+		//store result to dest
+		movss		[edx+24], xmm3
+
+		//-----iteration 2
+		//load 3 elements of mat b into sse regs
+		movss		xmm3, [ecx+4]	//0 * 3 + 1
+		movss		xmm4, [ecx+16]	//1 * 3 + 1
+		movss		xmm5, [ecx+28]	//2 * 3 + 1
+		//multiply the elements
+		mulss		xmm3, xmm0
+		mulss		xmm4, xmm1
+		mulss		xmm5, xmm2
+		//add
+		addss		xmm3, xmm4
+		addss		xmm3, xmm5
+		//store result to dest
+		movss		[edx+28], xmm3
+
+		//-----iteration 3
+		//load 3 elements of mat b into sse regs
+		movss		xmm3, [ecx+8]	//0 * 3 + 2
+		movss		xmm4, [ecx+20]	//1 * 3 + 2
+		movss		xmm5, [ecx+32]	//2 * 3 + 2
+		//multiply the elements
+		mulss		xmm3, xmm0
+		mulss		xmm4, xmm1
+		mulss		xmm5, xmm2
+		//add
+		addss		xmm3, xmm4
+		addss		xmm3, xmm5
+		//store result to dest
+		movss		[edx+32], xmm3
+	}
+#endif //HUMANHEAD END
+
 	return dst;
 }
 
@@ -513,6 +676,7 @@ ID_INLINE idMat3 &idMat3::operator*=( const idMat3 &a ) {
 	m1Ptr = reinterpret_cast<float *>(this);
 	m2Ptr = reinterpret_cast<const float *>(&a);
 
+#if 1
 	for ( i = 0; i < 3; i++ ) {
 		for ( j = 0; j < 3; j++ ) {
 			dst[j]  = m1Ptr[0] * m2Ptr[ 0 * 3 + j ]
@@ -522,6 +686,187 @@ ID_INLINE idMat3 &idMat3::operator*=( const idMat3 &a ) {
 		m1Ptr[0] = dst[0]; m1Ptr[1] = dst[1]; m1Ptr[2] = dst[2];
 		m1Ptr += 3;
 	}
+#else //HUMANHEAD rww - sse test (unideal, no aligned calculation)
+	float *dstPtr = dst;
+	__asm {
+		//get our memory locations
+		mov			eax, m1Ptr
+		mov			ecx, m2Ptr
+		mov			edx, dstPtr
+
+	//=====iteration 1
+		//load 3 elements of mat a into sse regs
+		movss		xmm0, [eax]
+		movss		xmm1, [eax+4]
+		movss		xmm2, [eax+8]
+
+		//-----iteration 1
+		//load 3 elements of mat b into sse regs
+		movss		xmm3, [ecx]		//0 * 3 + 0
+		movss		xmm4, [ecx+12]	//1 * 3 + 0
+		movss		xmm5, [ecx+24]	//2 * 3 + 0
+		//multiply the elements
+		mulss		xmm3, xmm0
+		mulss		xmm4, xmm1
+		mulss		xmm5, xmm2
+		//add
+		addss		xmm3, xmm4
+		addss		xmm3, xmm5
+		//store result to dest
+		movss		[edx], xmm3
+
+		//-----iteration 2
+		//load 3 elements of mat b into sse regs
+		movss		xmm3, [ecx+4]	//0 * 3 + 1
+		movss		xmm4, [ecx+16]	//1 * 3 + 1
+		movss		xmm5, [ecx+28]	//2 * 3 + 1
+		//multiply the elements
+		mulss		xmm3, xmm0
+		mulss		xmm4, xmm1
+		mulss		xmm5, xmm2
+		//add
+		addss		xmm3, xmm4
+		addss		xmm3, xmm5
+		//store result to dest
+		movss		[edx+4], xmm3
+
+		//-----iteration 3
+		//load 3 elements of mat b into sse regs
+		movss		xmm3, [ecx+8]	//0 * 3 + 2
+		movss		xmm4, [ecx+20]	//1 * 3 + 2
+		movss		xmm5, [ecx+32]	//2 * 3 + 2
+		//multiply the elements
+		mulss		xmm3, xmm0
+		mulss		xmm4, xmm1
+		mulss		xmm5, xmm2
+		//add
+		addss		xmm3, xmm4
+		addss		xmm3, xmm5
+		//store result to dest
+		movss		[eax+8], xmm3
+
+		//copy back to m1Ptr
+		mov			ebx, [edx]
+		mov			[eax], ebx
+		mov			ebx, [edx+4]
+		mov			[eax+4], ebx
+
+	//=====iteration 2
+		//load 3 elements of mat a into sse regs
+		movss		xmm0, [eax+12]
+		movss		xmm1, [eax+16]
+		movss		xmm2, [eax+20]
+
+		//-----iteration 1
+		//load 3 elements of mat b into sse regs
+		movss		xmm3, [ecx]		//0 * 3 + 0
+		movss		xmm4, [ecx+12]	//1 * 3 + 0
+		movss		xmm5, [ecx+24]	//2 * 3 + 0
+		//multiply the elements
+		mulss		xmm3, xmm0
+		mulss		xmm4, xmm1
+		mulss		xmm5, xmm2
+		//add
+		addss		xmm3, xmm4
+		addss		xmm3, xmm5
+		//store result to dest
+		movss		[edx], xmm3
+
+		//-----iteration 2
+		//load 3 elements of mat b into sse regs
+		movss		xmm3, [ecx+4]	//0 * 3 + 1
+		movss		xmm4, [ecx+16]	//1 * 3 + 1
+		movss		xmm5, [ecx+28]	//2 * 3 + 1
+		//multiply the elements
+		mulss		xmm3, xmm0
+		mulss		xmm4, xmm1
+		mulss		xmm5, xmm2
+		//add
+		addss		xmm3, xmm4
+		addss		xmm3, xmm5
+		//store result to dest
+		movss		[edx+4], xmm3
+
+		//-----iteration 3
+		//load 3 elements of mat b into sse regs
+		movss		xmm3, [ecx+8]	//0 * 3 + 2
+		movss		xmm4, [ecx+20]	//1 * 3 + 2
+		movss		xmm5, [ecx+32]	//2 * 3 + 2
+		//multiply the elements
+		mulss		xmm3, xmm0
+		mulss		xmm4, xmm1
+		mulss		xmm5, xmm2
+		//add
+		addss		xmm3, xmm4
+		addss		xmm3, xmm5
+		//store result to dest
+		movss		[eax+20], xmm3
+
+		//copy back to m1Ptr
+		mov			ebx, [edx]
+		mov			[eax+12], ebx
+		mov			ebx, [edx+4]
+		mov			[eax+16], ebx
+
+	//=====iteration 3
+		//load 3 elements of mat a into sse regs
+		movss		xmm0, [eax+24]
+		movss		xmm1, [eax+28]
+		movss		xmm2, [eax+32]
+
+		//-----iteration 1
+		//load 3 elements of mat b into sse regs
+		movss		xmm3, [ecx]		//0 * 3 + 0
+		movss		xmm4, [ecx+12]	//1 * 3 + 0
+		movss		xmm5, [ecx+24]	//2 * 3 + 0
+		//multiply the elements
+		mulss		xmm3, xmm0
+		mulss		xmm4, xmm1
+		mulss		xmm5, xmm2
+		//add
+		addss		xmm3, xmm4
+		addss		xmm3, xmm5
+		//store result to dest
+		movss		[edx], xmm3
+
+		//-----iteration 2
+		//load 3 elements of mat b into sse regs
+		movss		xmm3, [ecx+4]	//0 * 3 + 1
+		movss		xmm4, [ecx+16]	//1 * 3 + 1
+		movss		xmm5, [ecx+28]	//2 * 3 + 1
+		//multiply the elements
+		mulss		xmm3, xmm0
+		mulss		xmm4, xmm1
+		mulss		xmm5, xmm2
+		//add
+		addss		xmm3, xmm4
+		addss		xmm3, xmm5
+		//store result to dest
+		movss		[edx+4], xmm3
+
+		//-----iteration 3
+		//load 3 elements of mat b into sse regs
+		movss		xmm3, [ecx+8]	//0 * 3 + 2
+		movss		xmm4, [ecx+20]	//1 * 3 + 2
+		movss		xmm5, [ecx+32]	//2 * 3 + 2
+		//multiply the elements
+		mulss		xmm3, xmm0
+		mulss		xmm4, xmm1
+		mulss		xmm5, xmm2
+		//add
+		addss		xmm3, xmm4
+		addss		xmm3, xmm5
+		//store result to dest
+		movss		[eax+32], xmm3
+
+		//copy back to m1Ptr
+		mov			ebx, [edx]
+		mov			[eax+24], ebx
+		mov			ebx, [edx+4]
+		mov			[eax+28], ebx
+	}
+#endif //HUMANHEAD END
+
 	return *this;
 }
 
@@ -700,8 +1045,8 @@ ID_INLINE idMat3 idMat3::Inverse( void ) const {
 	idMat3 invMat;
 
 	invMat = *this;
-	int r = invMat.InverseSelf();
-	assert( r );
+	//HH rww SDK - removed unnecessary variable initialization
+	invMat.InverseSelf();
 	return invMat;
 }
 
@@ -709,8 +1054,8 @@ ID_INLINE idMat3 idMat3::InverseFast( void ) const {
 	idMat3 invMat;
 
 	invMat = *this;
-	int r = invMat.InverseFastSelf();
-	assert( r );
+	//HH rww SDK - removed unnecessary variable initialization
+	invMat.InverseFastSelf();
 	return invMat;
 }
 
@@ -771,6 +1116,7 @@ public:
 									const float wx, const float wy, const float wz, const float ww );
 					explicit idMat4( const idMat3 &rotation, const idVec3 &translation );
 					explicit idMat4( const float src[ 4 ][ 4 ] );
+					explicit idMat4(const float * m);
 
 	const idVec4 &	operator[]( int index ) const;
 	idVec4 &		operator[]( int index );
@@ -872,6 +1218,13 @@ ID_INLINE idMat4::idMat4( const idMat3 &rotation, const idVec3 &translation ) {
 
 ID_INLINE idMat4::idMat4( const float src[ 4 ][ 4 ] ) {
 	memcpy( mat, src, 4 * 4 * sizeof( float ) );
+}
+
+ID_INLINE idMat4::idMat4(const float * m) {
+	mat[0][0] = m[ 0]; mat[0][1] = m[ 4]; mat[0][2] = m[ 8]; mat[0][3] = m[12];
+	mat[1][0] = m[ 1]; mat[1][1] = m[ 5]; mat[1][2] = m[ 9]; mat[1][3] = m[13];
+	mat[2][0] = m[ 2]; mat[2][1] = m[ 6]; mat[2][2] = m[10]; mat[2][3] = m[14];
+	mat[3][0] = m[ 3]; mat[3][1] = m[ 7]; mat[3][2] = m[11]; mat[3][3] = m[15];
 }
 
 ID_INLINE const idVec4 &idMat4::operator[]( int index ) const {
@@ -1108,8 +1461,8 @@ ID_INLINE idMat4 idMat4::Inverse( void ) const {
 	idMat4 invMat;
 
 	invMat = *this;
-	int r = invMat.InverseSelf();
-	assert( r );
+	//HH rww SDK - removed unnecessary variable initialization
+	invMat.InverseSelf();
 	return invMat;
 }
 
@@ -1117,8 +1470,8 @@ ID_INLINE idMat4 idMat4::InverseFast( void ) const {
 	idMat4 invMat;
 
 	invMat = *this;
-	int r = invMat.InverseFastSelf();
-	assert( r );
+	//HH rww SDK - removed unnecessary variable initialization
+	invMat.InverseFastSelf();
 	return invMat;
 }
 
@@ -1413,8 +1766,8 @@ ID_INLINE idMat5 idMat5::Inverse( void ) const {
 	idMat5 invMat;
 
 	invMat = *this;
-	int r = invMat.InverseSelf();
-	assert( r );
+	//HH rww SDK - removed unnecessary variable initialization
+	invMat.InverseSelf();
 	return invMat;
 }
 
@@ -1422,8 +1775,8 @@ ID_INLINE idMat5 idMat5::InverseFast( void ) const {
 	idMat5 invMat;
 
 	invMat = *this;
-	int r = invMat.InverseFastSelf();
-	assert( r );
+	//HH rww SDK - removed unnecessary variable initialization
+	invMat.InverseFastSelf();
 	return invMat;
 }
 
@@ -1740,8 +2093,8 @@ ID_INLINE idMat6 idMat6::Inverse( void ) const {
 	idMat6 invMat;
 
 	invMat = *this;
-	int r = invMat.InverseSelf();
-	assert( r );
+	//HH rww SDK - removed unnecessary variable initialization
+	invMat.InverseSelf();
 	return invMat;
 }
 
@@ -1749,8 +2102,8 @@ ID_INLINE idMat6 idMat6::InverseFast( void ) const {
 	idMat6 invMat;
 
 	invMat = *this;
-	int r = invMat.InverseFastSelf();
-	assert( r );
+	//HH rww SDK - removed unnecessary variable initialization
+	invMat.InverseFastSelf();
 	return invMat;
 }
 
@@ -2584,8 +2937,8 @@ ID_INLINE idMatX idMatX::Inverse( void ) const {
 
 	invMat.SetTempSize( numRows, numColumns );
 	memcpy( invMat.mat, mat, numRows * numColumns * sizeof( float ) );
-	int r = invMat.InverseSelf();
-	assert( r );
+	//HH rww SDK - removed unnecessary variable initialization
+	invMat.InverseSelf();
 	return invMat;
 }
 
@@ -2620,8 +2973,8 @@ ID_INLINE idMatX idMatX::InverseFast( void ) const {
 
 	invMat.SetTempSize( numRows, numColumns );
 	memcpy( invMat.mat, mat, numRows * numColumns * sizeof( float ) );
-	int r = invMat.InverseFastSelf();
-	assert( r );
+	//HH rww SDK - removed unnecessary variable initialization
+	invMat.InverseFastSelf();
 	return invMat;
 }
 

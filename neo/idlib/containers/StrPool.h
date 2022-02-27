@@ -37,14 +37,20 @@ If you have questions concerning this license or the applicable additional terms
 ===============================================================================
 */
 
-class idStrPool;
-
 class idPoolStr : public idStr {
 	friend class idStrPool;
 
+
 public:
 						idPoolStr() { numUsers = 0; }
-						~idPoolStr() { assert( numUsers == 0 ); }
+// HUMANHEAD nla
+//! NLA - Put back		~idPoolStr() { assert( numUsers == 0 ); }
+						~idPoolStr() { 
+							if ( numUsers != 0 ) { 
+								assert( ! "You need to load and save this map in the editor." );
+							} 
+						}
+// HUMANHEAD END
 
 						// returns total size of allocated memory
 	size_t				Allocated( void ) const { return idStr::Allocated(); }

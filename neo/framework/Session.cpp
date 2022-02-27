@@ -1444,7 +1444,7 @@ void idSessionLocal::LoadLoadingGui( const char *mapName ) {
 	char guiMap[ MAX_STRING_CHARS ];
 	strncpy( guiMap, va( "guis/map/%s.gui", stripped.c_str() ), MAX_STRING_CHARS );
 	// give the gamecode a chance to override
-	game->GetMapLoadingGUI( guiMap );
+	//game->GetMapLoadingGUI( guiMap );
 
 	if ( uiManager->CheckGui( guiMap ) ) {
 		guiLoading = uiManager->FindGui( guiMap, true, false, true );
@@ -2375,7 +2375,7 @@ void idSessionLocal::Draw() {
 		if ( guiLoading ) {
 			guiLoading->Redraw( com_frameTime );
 		}
-		if ( guiActive == guiMsg ) {
+		if ( guiActive == guiMsg && guiMsg != NULL ) {
 			guiMsg->Redraw( com_frameTime );
 		} 
 	} else if ( guiTest ) {
@@ -2910,13 +2910,14 @@ void idSessionLocal::Init() {
 #endif
 	guiMainMenu_MapList = uiManager->AllocListGUI();
 	guiMainMenu_MapList->Config( guiMainMenu, "mapList" );
-	idAsyncNetwork::client.serverList.GUIConfig( guiMainMenu, "serverList" );
-	guiRestartMenu = uiManager->FindGui( "guis/restart.gui", true, false, true );
-	guiGameOver = uiManager->FindGui( "guis/gameover.gui", true, false, true );
-	guiMsg = uiManager->FindGui( "guis/msg.gui", true, false, true );
-	guiTakeNotes = uiManager->FindGui( "guis/takeNotes.gui", true, false, true );
-	guiIntro = uiManager->FindGui( "guis/intro.gui", true, false, true );
-
+	idAsyncNetwork::client.serverList.GUIConfig( guiMainMenu, "serverList" );	
+// jmarshall - gui
+	//guiRestartMenu = uiManager->FindGui( "guis/restart.gui", true, false, true );
+	//guiGameOver = uiManager->FindGui( "guis/gameover.gui", true, false, true );
+	//guiMsg = uiManager->FindGui( "guis/msg.gui", true, false, true );
+	//guiTakeNotes = uiManager->FindGui( "guis/takeNotes.gui", true, false, true );
+	//guiIntro = uiManager->FindGui( "guis/intro.gui", true, false, true );
+// jmarshall end
 	whiteMaterial = declManager->FindMaterial( "_white" );
 
 	guiInGame = NULL;
@@ -2983,37 +2984,37 @@ idSessionLocal::ReadCDKey
 =================
 */
 void idSessionLocal::ReadCDKey( void ) {
-	idStr filename;
-	idFile *f;
-	char buffer[32];
-
-	cdkey_state = CDKEY_UNKNOWN;
-
-	filename = "../" BASE_GAMEDIR "/" CDKEY_FILE;
-	f = fileSystem->OpenExplicitFileRead( fileSystem->RelativePathToOSPath( filename, "fs_savepath" ) );
-	if ( !f ) {
-		common->Printf( "Couldn't read %s.\n", filename.c_str() );
-		cdkey[ 0 ] = '\0';
-	} else {
-		memset( buffer, 0, sizeof(buffer) );
-		f->Read( buffer, CDKEY_BUF_LEN - 1 );
-		fileSystem->CloseFile( f );
-		idStr::Copynz( cdkey, buffer, CDKEY_BUF_LEN );
-	}
-
-	xpkey_state = CDKEY_UNKNOWN;
-
-	filename = "../" BASE_GAMEDIR "/" XPKEY_FILE;
-	f = fileSystem->OpenExplicitFileRead( fileSystem->RelativePathToOSPath( filename, "fs_savepath" ) );
-	if ( !f ) {
-		common->Printf( "Couldn't read %s.\n", filename.c_str() );
-		xpkey[ 0 ] = '\0';
-	} else {
-		memset( buffer, 0, sizeof(buffer) );
-		f->Read( buffer, CDKEY_BUF_LEN - 1 );
-		fileSystem->CloseFile( f );
-		idStr::Copynz( xpkey, buffer, CDKEY_BUF_LEN );
-	}
+	//idStr filename;
+	//idFile *f;
+	//char buffer[32];
+	//
+	//cdkey_state = CDKEY_UNKNOWN;
+	//
+	//filename = "../" BASE_GAMEDIR "/" CDKEY_FILE;
+	//f = fileSystem->OpenExplicitFileRead( fileSystem->RelativePathToOSPath( filename, "fs_savepath" ) );
+	//if ( !f ) {
+	//	common->Printf( "Couldn't read %s.\n", filename.c_str() );
+	//	cdkey[ 0 ] = '\0';
+	//} else {
+	//	memset( buffer, 0, sizeof(buffer) );
+	//	f->Read( buffer, CDKEY_BUF_LEN - 1 );
+	//	fileSystem->CloseFile( f );
+	//	idStr::Copynz( cdkey, buffer, CDKEY_BUF_LEN );
+	//}
+	//
+	//xpkey_state = CDKEY_UNKNOWN;
+	//
+	//filename = "../" BASE_GAMEDIR "/" XPKEY_FILE;
+	//f = fileSystem->OpenExplicitFileRead( fileSystem->RelativePathToOSPath( filename, "fs_savepath" ) );
+	//if ( !f ) {
+	//	common->Printf( "Couldn't read %s.\n", filename.c_str() );
+	//	xpkey[ 0 ] = '\0';
+	//} else {
+	//	memset( buffer, 0, sizeof(buffer) );
+	//	f->Read( buffer, CDKEY_BUF_LEN - 1 );
+	//	fileSystem->CloseFile( f );
+	//	idStr::Copynz( xpkey, buffer, CDKEY_BUF_LEN );
+	//}
 }
 
 /*
@@ -3022,31 +3023,31 @@ idSessionLocal::WriteCDKey
 ================
 */
 void idSessionLocal::WriteCDKey( void ) {
-	idStr filename;
-	idFile *f;
-	const char *OSPath;
-
-	filename = "../" BASE_GAMEDIR "/" CDKEY_FILE;
-	// OpenFileWrite advertises creating directories to the path if needed, but that won't work with a '..' in the path
-	// occasionally on windows, but mostly on Linux and OSX, the fs_savepath/base may not exist in full
-	OSPath = fileSystem->BuildOSPath( cvarSystem->GetCVarString( "fs_savepath" ), BASE_GAMEDIR, CDKEY_FILE );
-	fileSystem->CreateOSPath( OSPath );
-	f = fileSystem->OpenFileWrite( filename );
-	if ( !f ) {
-		common->Printf( "Couldn't write %s.\n", filename.c_str() );
-		return;
-	}
-	f->Printf( "%s%s", cdkey, CDKEY_TEXT );
-	fileSystem->CloseFile( f );
-
-	filename = "../" BASE_GAMEDIR "/" XPKEY_FILE;
-	f = fileSystem->OpenFileWrite( filename );
-	if ( !f ) {
-		common->Printf( "Couldn't write %s.\n", filename.c_str() );
-		return;
-	}
-	f->Printf( "%s%s", xpkey, CDKEY_TEXT );
-	fileSystem->CloseFile( f );
+//	idStr filename;
+//	idFile *f;
+//	const char *OSPath;
+//
+//	filename = "../" BASE_GAMEDIR "/" CDKEY_FILE;
+//	// OpenFileWrite advertises creating directories to the path if needed, but that won't work with a '..' in the path
+//	// occasionally on windows, but mostly on Linux and OSX, the fs_savepath/base may not exist in full
+//	OSPath = fileSystem->BuildOSPath( cvarSystem->GetCVarString( "fs_savepath" ), BASE_GAMEDIR, CDKEY_FILE );
+//	fileSystem->CreateOSPath( OSPath );
+//	f = fileSystem->OpenFileWrite( filename );
+//	if ( !f ) {
+//		common->Printf( "Couldn't write %s.\n", filename.c_str() );
+//		return;
+//	}
+//	f->Printf( "%s%s", cdkey, CDKEY_TEXT );
+//	fileSystem->CloseFile( f );
+//
+//	filename = "../" BASE_GAMEDIR "/" XPKEY_FILE;
+//	f = fileSystem->OpenFileWrite( filename );
+//	if ( !f ) {
+//		common->Printf( "Couldn't write %s.\n", filename.c_str() );
+//		return;
+//	}
+//	f->Printf( "%s%s", xpkey, CDKEY_TEXT );
+//	fileSystem->CloseFile( f );
 }
 
 /*

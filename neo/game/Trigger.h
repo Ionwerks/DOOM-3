@@ -60,6 +60,8 @@ public:
 protected:
 	void				CallScript( void ) const;
 
+private:
+	virtual // HUMANHEAD pdm
 	void				Event_Enable( void );
 	void				Event_Disable( void );
 

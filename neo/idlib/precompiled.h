@@ -29,11 +29,11 @@ If you have questions concerning this license or the applicable additional terms
 #ifndef __PRECOMPILED_H__
 #define __PRECOMPILED_H__
 
+#define ID_TIME_T time_t
+
 #ifdef __cplusplus
 
 //-----------------------------------------------------
-
-#define ID_TIME_T time_t
 
 #ifdef _WIN32
 
@@ -44,33 +44,28 @@ If you have questions concerning this license or the applicable additional terms
 
 #define WINVER				0x501
 
-#if 0
-// Dedicated server hits unresolved when trying to link this way now. Likely because of the 2010/Win7 transition? - TTimo
-
 #ifdef	ID_DEDICATED
 // dedicated sets windows version here
 #define	_WIN32_WINNT WINVER
 #define	WIN32_LEAN_AND_MEAN
-#else
-// non-dedicated includes MFC and sets windows version here
+//HUMANHEAD PCF rww 08/14/06 - make the debug dedicated compile
 #include "../tools/comafx/StdAfx.h"			// this will go away when MFC goes away
-#endif
-
+//HUMANHEAD END
 #else
-
-#include "../tools/comafx/StdAfx.h"
-
+// non-dedicated includes MFC and sets windows verion here
+#include "../tools/comafx/StdAfx.h"			// this will go away when MFC goes away
 #endif
 
 #include <winsock2.h>
 #include <mmsystem.h>
 #include <mmreg.h>
 
-#define DIRECTINPUT_VERSION  0x0800			// was 0x0700 with the old mssdk
+#define DIRECTINPUT_VERSION  0x0800
 #define DIRECTSOUND_VERSION  0x0800
 
 #include <dsound.h>
 #include <dinput.h>
+//#include <dxerr8.h>
 
 #endif /* !GAME_DLL */
 #endif /* !_D3SDK */
@@ -78,7 +73,8 @@ If you have questions concerning this license or the applicable additional terms
 #pragma warning(disable : 4100)				// unreferenced formal parameter
 #pragma warning(disable : 4244)				// conversion to smaller type, possible loss of data
 #pragma warning(disable : 4714)				// function marked as __forceinline not inlined
-#pragma warning(disable : 4996)				// unsafe string operations
+
+#include "../framework/dotnetwarnings.h" //HUMANHEAD rww
 
 #include <malloc.h>							// no malloc.h on mac or unix
 #include <windows.h>						// for qgl.h
@@ -106,16 +102,23 @@ If you have questions concerning this license or the applicable additional terms
 
 //-----------------------------------------------------
 
+//HUMANHEAD rww - moved up from "framework"
+//#include "../framework/BuildVersion.h" // HUMANHEAD mdl:  Removed from precompiled headers and put in individual cpp files as needed.
+#include "../framework/BuildDefines.h"
+#include "../framework/Licensee.h"
+//HUMANHEAD END
+
 // non-portable system services
 #include "../sys/sys_public.h"
 
 // id lib
 #include "../idlib/Lib.h"
 
+#if !defined( _D3SDK ) && defined( __WITH_PB__ )
+	#include "../punkbuster/pbcommon.h"
+#endif
+
 // framework
-#include "../framework/BuildVersion.h"
-#include "../framework/BuildDefines.h"
-#include "../framework/Licensee.h"
 #include "../framework/CmdSystem.h"
 #include "../framework/CVarSystem.h"
 #include "../framework/Common.h"
@@ -132,6 +135,17 @@ If you have questions concerning this license or the applicable additional terms
 #include "../framework/DeclParticle.h"
 #include "../framework/DeclAF.h"
 #include "../framework/DeclPDA.h"
+#include "../framework/declPreyBeam.h" // HUMANHEAD CJR
+
+//HUMANHEAD rww - for memory build
+#ifdef ID_REDIRECT_NEWDELETE
+#undef new
+void *						operator new( size_t );
+void *						operator new( size_t s, int, int, char *, int );
+void						operator delete( void * );
+void						operator delete( void *, int, int, char *, int );
+#endif
+//HUMANHEAD END
 
 // We have expression parsing and evaluation code in multiple places:
 // materials, sound shaders, and guis. We should unify them.
@@ -164,8 +178,13 @@ const int MAX_EXPRESSION_REGISTERS = 4096;
 #include "../tools/compilers/aas/AASFile.h"
 #include "../tools/compilers/aas/AASFileManager.h"
 
+//HUMANHEAD
+//#include "../preyengine/profiler.h"			// Exposed to both engine and game
+											// Must be after engine systems, but before game.h
+//HUMANHEAD END
+
 // game
-#if defined(_D3XP)
+#if defined(_D3XP) && defined(GAME_DLL)
 #include "../d3xp/Game.h"
 #else
 #include "../game/Game.h"
@@ -195,6 +214,11 @@ const int MAX_EXPRESSION_REGISTERS = 4096;
 #include "../framework/Console.h"
 #include "../framework/DemoFile.h"
 #include "../framework/Session.h"
+//HUMANHEAD rww
+#if _HH_SECUROM_DONOTREALLYNEED
+#include "../framework/securom/securom_api.h"
+#endif
+//HUMANHEAD END
 
 // asynchronous networking
 #include "../framework/async/AsyncNetwork.h"

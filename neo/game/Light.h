@@ -81,6 +81,11 @@ public:
 	void			SetLightParent( idEntity *lparent ) { lightParent = lparent; }
 	void			SetLightLevel( void );
 
+	//HUMANHEAD: cjr
+	int				GetCurrentLevel() { return( currentLevel ); }
+	//HUMANHEAD END
+	const idMaterial*	GetMaterial() { return renderLight.shader; }
+
 	virtual void	ShowEditingDialog( void );
 
 	enum {
@@ -93,7 +98,8 @@ public:
 	virtual void	ReadFromSnapshot( const idBitMsgDelta &msg );
 	virtual bool	ClientReceiveEvent( int event, int time, const idBitMsg &msg );
 
-private:
+//HUMANHEAD: aob - changed to protected
+protected:
 	renderLight_t	renderLight;				// light presented to the renderer
 	idVec3			localLightOrigin;			// light origin relative to the physics origin
 	idMat3			localLightAxis;				// light axis relative to physics axis
@@ -112,7 +118,8 @@ private:
 	int				fadeEnd;
 	bool			soundWasPlaying;
 
-private:
+//HUMANHEAD: aob - changed to protected
+protected:
 	void			PresentLightDefChange( void );
 	void			PresentModelDefChange( void );
 

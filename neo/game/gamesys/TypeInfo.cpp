@@ -27,6 +27,7 @@ If you have questions concerning this license or the applicable additional terms
 */
 
 // This is real evil but allows the code to inspect arbitrary class variables.
+#define _ALLOW_KEYWORD_MACROS
 #define private		public
 #define protected	public
 
@@ -34,12 +35,13 @@ If you have questions concerning this license or the applicable additional terms
 #pragma hdrstop
 
 #include "../Game_local.h"
+#include "../../prey/prey_local.h"	// HUMANHEAD tmj: Prey types should be included in parse
 
-#ifdef ID_DEBUG_MEMORY
-#include "GameTypeInfo.h"				// Make sure this is up to date!
-#else
+//#ifdef ID_DEBUG_MEMORY
+//#include "GameTypeInfo.h"				// Make sure this is up to date!
+//#else
 #include "NoGameTypeInfo.h"
-#endif
+//#endif
 
 // disabled because it's adds about 64MB to state dumps and takes a really long time
 //#define DUMP_GAMELOCAL
@@ -105,6 +107,13 @@ const char *GetTypeVariableName( const char *typeName, int offset ) {
 			i = -1;
 		}
 	}
+
+	// HUMANHEAD tmj: if type wasn't included in the typeinfo parse, just warn about it
+	if(NULL == classTypeInfo[i].typeName) {
+		idStr::snPrintf( varName, sizeof( varName ), "[unregistered type: %s]", typeName );
+		return varName;
+	}
+	// HUMANHEAD END
 
 	const classTypeInfo_t &classInfo = classTypeInfo[i];
 
@@ -376,6 +385,7 @@ bool IsRenderHandleVariable( const char *varName, const char *varType, const cha
 		if ( idStr::Icmp( varName, "itemShellHandle" ) == 0 ) {
 			return true;
 		}
+/*	HUMANHEAD pdm: removed, unused
 	} else if ( idStr::Icmp( scope, "idExplodingBarrel" ) == 0 ) {
 		if ( idStr::Icmp( varName, "particleModelDefHandle" ) == 0 ) {
 			return true;
@@ -383,14 +393,17 @@ bool IsRenderHandleVariable( const char *varName, const char *varType, const cha
 		if ( idStr::Icmp( varName, "lightDefHandle" ) == 0 ) {
 			return true;
 		}
+*/
 	} else if ( idStr::Icmp( scope, "idProjectile" ) == 0 ) {
 		if ( idStr::Icmp( varName, "lightDefHandle" ) == 0 ) {
 			return true;
 		}
+/*	HUMANHEAD pdm: removed, unused
 	} else if ( idStr::Icmp( scope, "idBFGProjectile" ) == 0 ) {
 		if ( idStr::Icmp( varName, "secondModelDefHandle" ) == 0 ) {
 			return true;
 		}
+*/
 	} else if ( idStr::Icmp( scope, "idSmokeParticles" ) == 0 ) {
 		if ( idStr::Icmp( varName, "renderEntityHandle" ) == 0 ) {
 			return true;

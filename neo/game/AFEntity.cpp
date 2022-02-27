@@ -241,7 +241,8 @@ void idChain::Spawn( void ) {
 ===============================================================================
 */
 
-CLASS_DECLARATION( idAnimatedEntity, idAFAttachment )
+// HUMANHEAD pdm: Changed to hhAnimatedEntity
+CLASS_DECLARATION( hhAnimatedEntity, idAFAttachment )
 END_CLASS
 
 /*
@@ -384,11 +385,11 @@ void idAFAttachment::Damage( idEntity *inflictor, idEntity *attacker, const idVe
 idAFAttachment::AddDamageEffect
 ================
 */
-void idAFAttachment::AddDamageEffect( const trace_t &collision, const idVec3 &velocity, const char *damageDefName ) {
+void idAFAttachment::AddDamageEffect( const trace_t &collision, const idVec3 &velocity, const char *damageDefName, bool broadcast ) { //HUMANHEAD rww - added broadcast
 	if ( body ) {
 		trace_t c = collision;
 		c.c.id = JOINT_HANDLE_TO_CLIPMODEL_ID( attachJoint );
-		body->AddDamageEffect( c, velocity, damageDefName );
+		body->AddDamageEffect( c, velocity, damageDefName, broadcast );
 	}
 }
 
@@ -448,7 +449,8 @@ idAfAttachment::Think
 ================
 */
 void idAFAttachment::Think( void ) {
-	idAnimatedEntity::Think();
+	// HUMANHEAD pdm: Changed to hhAnimatedEntity
+	hhAnimatedEntity::Think();
 	if ( thinkFlags & TH_UPDATEPARTICLES ) {
 		UpdateDamageEffects();
 	}
@@ -504,7 +506,6 @@ void idAFAttachment::UnlinkCombat( void ) {
 	}
 }
 
-
 /*
 ===============================================================================
 
@@ -514,10 +515,32 @@ void idAFAttachment::UnlinkCombat( void ) {
 */
 
 const idEventDef EV_SetConstraintPosition( "SetConstraintPosition", "sv" );
+const idEventDef EV_SetCollision( "setAFCollision", "d" );	// HUMANHEAD pdm
 
-CLASS_DECLARATION( idAnimatedEntity, idAFEntity_Base )
+// HUMANHEAD pdm: Changed to hhAnimatedEntity
+CLASS_DECLARATION( hhAnimatedEntity, idAFEntity_Base )
 	EVENT( EV_SetConstraintPosition,	idAFEntity_Base::Event_SetConstraintPosition )
+	EVENT( EV_SetCollision,				idAFEntity_Base::Event_SetCollision )			// HUMANHEAD pdm
 END_CLASS
+
+// HUMANHEAD nla - forward decar's for Evil C++
+class hhDoor { 
+ public:
+ 	static  idTypeInfo Type;
+};
+
+// HUMANHEAD mdl:  I hate these partial decls, but I need them for the other door types too
+class hhModelDoor {
+ public:
+	 static  idTypeInfo Type;
+};
+
+class hhProxDoor {
+ public:
+	 static  idTypeInfo Type;
+};
+
+// HUMANHEAD END
 
 static const float BOUNCE_SOUND_MIN_VELOCITY	= 80.0f;
 static const float BOUNCE_SOUND_MAX_VELOCITY	= 200.0f;
@@ -531,6 +554,7 @@ idAFEntity_Base::idAFEntity_Base( void ) {
 	combatModel = NULL;
 	combatModelContents = 0;
 	nextSoundTime = 0;
+	numSplats = 0;	//HUMANHEAD bjk
 	spawnOrigin.Zero();
 	spawnAxis.Identity();
 }
@@ -557,6 +581,13 @@ void idAFEntity_Base::Save( idSaveGame *savefile ) const {
 	savefile->WriteMat3( spawnAxis );
 	savefile->WriteInt( nextSoundTime );
 	af.Save( savefile );
+	// HUMANHEAD mdl
+	savefile->WriteBool( impulseFromSelf );
+	savefile->WriteInt( numSplats );
+	for ( int i = 0; i < 16; i++ ) {
+		savefile->WriteVec3( splats[i] );
+	}
+	// HUMANHEAD END
 }
 
 /*
@@ -573,6 +604,14 @@ void idAFEntity_Base::Restore( idRestoreGame *savefile ) {
 	LinkCombat();
 
 	af.Restore( savefile );
+
+	// HUMANHEAD mdl
+	savefile->ReadBool( impulseFromSelf );
+	savefile->ReadInt( numSplats );
+	for ( int i = 0; i < 16; i++ ) {
+		savefile->ReadVec3( splats[i] );
+	}
+	// HUMANHEAD END
 }
 
 /*
@@ -584,6 +623,10 @@ void idAFEntity_Base::Spawn( void ) {
 	spawnOrigin = GetPhysics()->GetOrigin();
 	spawnAxis = GetPhysics()->GetAxis();
 	nextSoundTime = 0;
+
+	// HUMANHEAD nla
+	impulseFromSelf = false;
+	// HUMANHEAD END
 }
 
 /*
@@ -629,6 +672,15 @@ void idAFEntity_Base::Think( void ) {
 		Present();
 		LinkCombat();
 	}
+
+	// HUMANHEAD nla - Added logic to allow things to touch triggers
+	if ( fl.touchTriggers ) {
+		TouchTriggers();
+	}
+	// HUMANHEAD END
+	//HUMANHEAD: aob - moved from idActor
+	UpdateWounds();
+	//HUMANHEAD END
 }
 
 /*
@@ -693,6 +745,16 @@ void idAFEntity_Base::AddBindConstraints( void ) {
 
 /*
 ================
+HUMANHEAD bjk
+idAFEntity_Base::AddBindConstraints
+================
+*/
+void idAFEntity_Base::AddBindConstraint( constraintType_t type, int bodyId, jointHandle_t joint ) {
+	af.AddBindConstraint( type, bodyId, joint, GetBindMaster() );
+}
+
+/*
+================
 idAFEntity_Base::RemoveBindConstraints
 ================
 */
@@ -720,7 +782,12 @@ idAFEntity_Base::ApplyImpulse
 */
 void idAFEntity_Base::ApplyImpulse( idEntity *ent, int id, const idVec3 &point, const idVec3 &impulse ) {
 	if ( af.IsLoaded() ) {
-		af.ApplyImpulse( ent, id, point, impulse );
+		// HUMANHEAD nla 
+		// mdl:  Changed so CheckImpulse can now reject an impulse for no-gore mode
+		if ( CheckImpulse( ent ) ) {			// Allow ragdolls to know if a force is from itself, or outside.  Prevents ragdoll "issues" with the number of bodies in a ragdoll.
+			af.ApplyImpulse( ent, id, point, impulse );
+		}
+		// HUMANHEAD END
 	}
 	if ( !af.IsActive() ) {
 		idEntity::ApplyImpulse( ent, id, point, impulse );
@@ -760,6 +827,20 @@ bool idAFEntity_Base::Collide( const trace_t &collision, const idVec3 &velocity 
 			}
 			nextSoundTime = gameLocal.time + 500;
 		}
+		if ( g_bloodEffects.GetBool() && g_ragdollDecals.GetBool() && v > 2.0f && spawnArgs.GetBool("produces_splats") && numSplats < 16 ) {
+			bool close = false;
+			for(int i=0;i<numSplats;i++) {
+				idVec3 dist = splats[i] - collision.c.point;
+				if( dist * dist < 35.0f )
+					close = true;
+			}
+			if( !close ) {
+				idStr decal = spawnArgs.RandomPrefix( "mtr_splat", gameLocal.random );
+				gameLocal.ProjectDecal(collision.c.point, -collision.c.normal, 10.0f, true, spawnArgs.GetFloat("splat_size", "20"), decal );
+				splats[numSplats] = collision.c.point;
+				numSplats++;
+			}
+		}
 	}
 
 	return false;
@@ -790,6 +871,25 @@ bool idAFEntity_Base::UpdateAnimationControllers( void ) {
 		}
 	}
 	return false;
+}
+
+/*
+=============
+idAFEntity_Base::CheckImpulse
+	HUMANHEAD nla
+=============
+*/
+bool idAFEntity_Base::CheckImpulse( idEntity *impulseSource ) {
+	if (GERMAN_VERSION || g_nogore.GetBool()) {
+		if ( !spawnArgs.GetBool( "not_gory", "0" ) && impulseSource->IsType( hhProjectile::Type ) ) {
+			return false;
+		}
+	}
+	impulseFromSelf = (impulseSource == this);
+	if (!impulseFromSelf) {
+		StartSound("snd_impulse", SND_CHANNEL_ANY, 0, true);
+	}
+	return true;
 }
 
 /*
@@ -908,7 +1008,7 @@ void idAFEntity_Base::DropAFs( idEntity *ent, const char *type, idList<idEntity 
 			af = static_cast<idAFEntity_Base *>(newEnt);
 			af->GetPhysics()->SetOrigin( ent->GetPhysics()->GetOrigin() );
 			af->GetPhysics()->SetAxis( ent->GetPhysics()->GetAxis() );
-			af->af.SetupPose( ent, gameLocal.time );
+			af->af.SetupPose( ent, gameLocal.time, false ); // HUMANHEAD mdl:  Added false to disable physics check
 			if ( list ) {
 				list->Append( af );
 			}
@@ -982,6 +1082,9 @@ idAFEntity_Gibbable::Save
 void idAFEntity_Gibbable::Save( idSaveGame *savefile ) const {
 	savefile->WriteBool( gibbed );
 	savefile->WriteBool( combatModel != NULL );
+	// HUMANHEAD mdl
+	savefile->WriteInt( gibHealth );
+	// HUMANHEAD END
 }
 
 /*
@@ -994,6 +1097,10 @@ void idAFEntity_Gibbable::Restore( idRestoreGame *savefile ) {
 
 	savefile->ReadBool( gibbed );
 	savefile->ReadBool( hasCombatModel );
+
+	// HUMANHEAD mdl
+	savefile->ReadInt( gibHealth );
+	// HUMANHEAD END
 
 	InitSkeletonModel();
 
@@ -1012,6 +1119,9 @@ void idAFEntity_Gibbable::Spawn( void ) {
 	InitSkeletonModel();
 
 	gibbed = false;
+	// HUMANHEAD mdl
+	gibHealth = spawnArgs.GetInt( "gibhealth", "0" );
+	// HUMANHEAD END
 }
 
 /*
@@ -1051,6 +1161,7 @@ idAFEntity_Gibbable::Present
 ================
 */
 void idAFEntity_Gibbable::Present( void ) {
+	PROFILE_SCOPE("Present", PROFMASK_NORMAL);
 	renderEntity_t skeleton;
 
 	if ( !gameLocal.isNewFrame ) {
@@ -1087,7 +1198,15 @@ void idAFEntity_Gibbable::Damage( idEntity *inflictor, idEntity *attacker, const
 		return;
 	}
 	idAFEntity_Base::Damage( inflictor, attacker, dir, damageDefName, damageScale, location );
-	if ( health < -20 && spawnArgs.GetBool( "gib" ) ) {
+
+	// HUMANHEAD mdl
+	const idDict *damageDef = gameLocal.FindEntityDefDict( damageDefName );
+	if ( !damageDef ) {
+		gameLocal.Error( "Unknown damageDef '%s'\n", damageDefName );
+	}
+	// HUMANHEAD END
+
+	if ( gibHealth != 0 && health < gibHealth && damageDef->GetBool( "gib" ) && spawnArgs.GetBool( "gib" ) ) { // HUMANHEAD mdl:  Changed to gibHealth instead of -20, and added damageDef gib check
 		Gib( dir, damageDefName );
 	}
 }
@@ -1116,9 +1235,17 @@ void idAFEntity_Gibbable::SpawnGibs( const idVec3 &dir, const char *damageDefNam
 	// spawn gib items
 	idMoveableItem::DropItems( this, "gib", &list );
 
+	// HUMANHEAD mdl
+	gibNonSolid = damageDef->GetBool( "gibNonSolid" ); // Moved this up from below
+	const char *debris = spawnArgs.GetString( "def_gibDebrisSpawner" );
+	float duration = 4.0f; // Default to 4 seconds, original Doom3 time to live
+	if ( debris && *debris ) {
+		hhUtils::SpawnDebrisMass( debris, this->GetOrigin(), &this->GetAxis()[2], &dir, -1, gibNonSolid, &duration, this ); //rww - now using entity ptr
+	}
+	// HUMANHEAD END
+
 	// blow out the gibs in the given direction away from the center of the entity
 	entityCenter = GetPhysics()->GetAbsBounds().GetCenter();
-	gibNonSolid = damageDef->GetBool( "gibNonSolid" );
 	for ( i = 0; i < list.Num(); i++ ) {
 		if ( gibNonSolid ) {
 			list[i]->GetPhysics()->SetContents( 0 );
@@ -1134,8 +1261,12 @@ void idAFEntity_Gibbable::SpawnGibs( const idVec3 &dir, const char *damageDefNam
 			list[i]->GetPhysics()->SetLinearVelocity( velocity * 75.0f );
 		}
 		list[i]->GetRenderEntity()->noShadow = true;
-		list[i]->GetRenderEntity()->shaderParms[ SHADERPARM_TIME_OF_DEATH ] = gameLocal.time * 0.001f;
-		list[i]->PostEventSec( &EV_Remove, 4.0f );
+		// HUMANHEAD mdl:  Removed time of death and added duration from debris spawner
+		//list[i]->GetRenderEntity()->shaderParms[ SHADERPARM_TIME_OF_DEATH ] = gameLocal.time * 0.001f; // HUMANHEAD mdl:  We never want this set on gib pieces
+		if ( duration != 0.0f ) {
+			list[i]->PostEventSec( &EV_Remove, duration );
+		}
+		// HUMANHEAD END
 	}
 }
 
@@ -1155,6 +1286,14 @@ void idAFEntity_Gibbable::Gib( const idVec3 &dir, const char *damageDefName ) {
 		gameLocal.Error( "Unknown damageDef '%s'", damageDefName );
 	}
 
+#if HUMANHEAD
+	GetAFPhysics()->SetContents( 0 );
+	GetAFPhysics()->SetClipMask( 0 );
+	GetAFPhysics()->UnlinkClip();
+	if ( af.IsLoaded() ) { // HUMANHEAD mdl:  Added IsLoaded() check
+		GetAFPhysics()->PutToRest();
+	}
+#else
 	if ( damageDef->GetBool( "gibNonSolid" ) ) {
 		GetAFPhysics()->SetContents( 0 );
 		GetAFPhysics()->SetClipMask( 0 );
@@ -1164,6 +1303,7 @@ void idAFEntity_Gibbable::Gib( const idVec3 &dir, const char *damageDefName ) {
 		GetAFPhysics()->SetContents( CONTENTS_CORPSE );
 		GetAFPhysics()->SetClipMask( CONTENTS_SOLID );
 	}
+#endif
 
 	UnlinkCombat();
 
@@ -1181,6 +1321,7 @@ void idAFEntity_Gibbable::Gib( const idVec3 &dir, const char *damageDefName ) {
 	}
 
 
+	Hide(); // HUMANHEAD mdl:  Hide the entity but wait 4 seconds before removing so snd_gibbed will play
 	PostEventSec( &EV_Gibbed, 4.0f );
 }
 
@@ -1191,6 +1332,43 @@ idAFEntity_Gibbable::Event_Gib
 */
 void idAFEntity_Gibbable::Event_Gib( const char *damageDefName ) {
 	Gib( idVec3( 0, 0, 1 ), damageDefName );
+}
+
+/*
+=============
+idAFEntity_Gibbable::CheckRagdollDamage
+  Returns false if nothing was done, 
+  Returns true if was removed
+HUMANHEAD nla
+=============
+*/
+bool idAFEntity_Gibbable::CheckRagdollDamage( idEntity *inflictor, idEntity *attacker, const idVec3 &dir, const char *damageDefName, int location ) {
+
+	if ( !af.IsLoaded() || !af.IsActive() ) {
+		return false;
+	}
+
+	// HUMANHEAD mdl:  Check to see if the damageDef is supposed to gib
+	const idDict *damageDef = gameLocal.FindEntityDefDict( damageDefName );
+	if ( !damageDef ) {
+		gameLocal.Error( "Unknown damageDef '%s'", damageDefName );
+	}
+	if ( !damageDef->GetBool( "gib" ) ) {
+		return false;
+	}
+	// HUMANHEAD END
+
+	if ( inflictor && ( inflictor->IsType( hhDoor::Type ) || inflictor->IsType( hhModelDoor::Type ) || inflictor->IsType( hhProxDoor::Type ) ) ) { // HUMANHEAD mdl:  Added additional checks for hhModelDoor and hhProxDoor
+		Gib( dir, damageDefName );
+		return true;
+	}
+	
+	if ( gibHealth && health < gibHealth ) {
+		Gib( dir, damageDefName );
+		return true;
+	}
+
+	return false;
 }
 
 /*
@@ -1403,7 +1581,14 @@ void idAFEntity_WithAttachedHead::SetupHead( void ) {
 	idVec3				origin;
 	idMat3				axis;
 
-	headModel = spawnArgs.GetString( "def_head", "" );
+	//HUMANHEAD rww - disabled in mp for now
+	if (gameLocal.isMultiplayer) {
+		return;
+	}
+	//HUMANHEAD END
+
+	// HUMANHEAD pdm: changed from def_head to model_head for precaching
+	headModel = spawnArgs.GetString( "model_head", "" );
 	if ( headModel[ 0 ] ) {
 		jointName = spawnArgs.GetString( "head_joint" );
 		joint = animator.GetJointHandle( jointName );
@@ -1417,11 +1602,23 @@ void idAFEntity_WithAttachedHead::SetupHead( void ) {
 		headEnt->SetCombatModel();
 		head = headEnt;
 
+		// HUMANHEAD CJR:  Set up scale on the head
+		float scale = 1.0f;
+		if ( spawnArgs.FindKey("scale") ) {
+			scale = spawnArgs.GetFloat("scale", "1.0" );
+			headEnt->SetShaderParm( SHADERPARM_ANY_DEFORM, DEFORMTYPE_SCALE );
+			headEnt->SetShaderParm( SHADERPARM_ANY_DEFORM_PARM1, scale );
+		} // HUMANHEAD END
+
 		animator.GetJointTransform( joint, gameLocal.time, origin, axis );
-		origin = renderEntity.origin + origin * renderEntity.axis;
+		origin = renderEntity.origin + origin * ( renderEntity.axis * scale ); // HUMANHEAD CJR:  Factor in scale
 		headEnt->SetOrigin( origin );
 		headEnt->SetAxis( renderEntity.axis );
 		headEnt->BindToJoint( this, joint, true );
+
+		// HUMANHEAD pdm:  Copy the skin to the head as well
+		headEnt->SetSkin( this->GetSkin() );
+		// END HUMANHEAD
 	}
 }
 
@@ -2547,7 +2744,12 @@ bool idGameEdit::AF_SpawnEntity( const char *fileName ) {
 	args.Set( "angle", va( "%f", yaw + 180 ) );
 	org = player->GetPhysics()->GetOrigin() + idAngles( 0, yaw, 0 ).ToForward() * 80 + idVec3( 0, 0, 1 );
 	args.Set( "origin", org.ToString() );
+	// HUMANHEAD nla - Need them to spawn a hhAFEntity
+#ifdef HUMANHEAD
+	args.Set( "spawnclass", "hhAFEntity" );
+#else
 	args.Set( "spawnclass", "idAFEntity_Generic" );
+#endif	// HUMANHEAD END
 	if ( af->model[0] ) {
 		args.Set( "model", af->model.c_str() );
 	} else {
@@ -2558,7 +2760,12 @@ bool idGameEdit::AF_SpawnEntity( const char *fileName ) {
 	}
 	args.Set( "articulatedFigure", fileName );
 	args.Set( "nodrop", "1" );
+	// HUMANHEAD nla - Need them to spawn a hhAFEntity
+#ifdef HUMANHEAD
+	ent = static_cast<idAFEntity_Generic *>( gameLocal.SpawnObject( "ragdoll_base", &args ) );
+#else
 	ent = static_cast<idAFEntity_Generic *>(gameLocal.SpawnEntityType( idAFEntity_Generic::Type, &args));
+#endif	// HUMANHEAD END
 
 	// always update this entity
 	ent->BecomeActive( TH_THINK );
@@ -2704,6 +2911,9 @@ idRenderModel *idGameEdit::AF_CreateMesh( const idDict &args, idVec3 &meshOrigin
 
 	classname = args.GetString( "classname" );
 	defArgs = gameLocal.FindEntityDefDict( classname );
+	if ( !defArgs ) {
+		gameLocal.Error( "Unknown classname '%s'", classname );
+	}
 
 	// get the articulated figure
 	afName = GetArgString( args, defArgs, "articulatedFigure" );
@@ -2876,4 +3086,11 @@ idRenderModel *idGameEdit::AF_CreateMesh( const idDict &args, idVec3 &meshOrigin
 
 	// instantiate a mesh using the joint information from the render entity
 	return md5->InstantiateDynamicModel( &ent, NULL, NULL );
+}
+
+// HUMANHEAD pdm: method for turning off ragdoll collision
+void idAFEntity_Base::Event_SetCollision(int on) {
+	if (GetPhysics() && GetPhysics()->IsType(idPhysics_AF::Type)) {
+		static_cast<idPhysics_AF*>(GetPhysics())->SetCollision(on != 0);
+	}
 }

@@ -40,37 +40,20 @@ If you have questions concerning this license or the applicable additional terms
 // these library functions should not be used for cross platform compatibility
 #define strcmp			idStr::Cmp		// use_idStr_Cmp
 #define strncmp			use_idStr_Cmpn
-
-#if defined( StrCmpN )
-#undef StrCmpN
-#endif
-#define StrCmpN			use_idStr_Cmpn
-
-#if defined( strcmpi )
-#undef strcmpi
-#endif
+//#define StrCmpN			use_idStr_Cmpn
 #define strcmpi			use_idStr_Icmp
-
-#if defined( StrCmpI )
-#undef StrCmpI
-#endif
-#define StrCmpI			use_idStr_Icmp
-
-#if defined( StrCmpNI )
-#undef StrCmpNI
-#endif
-#define StrCmpNI		use_idStr_Icmpn
-
+//#define StrCmpI			use_idStr_Icmp
 #define stricmp			idStr::Icmp		// use_idStr_Icmp
 #define _stricmp		use_idStr_Icmp
 #define strcasecmp		use_idStr_Icmp
 #define strnicmp		use_idStr_Icmpn
 #define _strnicmp		use_idStr_Icmpn
 #define _memicmp		use_idStr_Icmpn
+//#define StrCmpNI		use_idStr_Icmpn
 #define snprintf		use_idStr_snPrintf
 #define _snprintf		use_idStr_snPrintf
 #define vsnprintf		use_idStr_vsnPrintf
-#define _vsnprintf		use_idStr_vsnPrintf
+//#define _vsnprintf		use_idStr_vsnPrintf
 
 class idVec4;
 
@@ -816,7 +799,8 @@ ID_INLINE void idStr::Insert( const char *text, int index ) {
 
 ID_INLINE void idStr::ToLower( void ) {
 	for (int i = 0; data[i]; i++ ) {
-		if ( CharIsUpper( data[i] ) ) {
+		// HUMANHEAD pdm: cast to unsigned for the sake of western european characters, which use the sign bit
+		if ( CharIsUpper( (unsigned char)data[i] ) ) {
 			data[i] += ( 'a' - 'A' );
 		}
 	}
@@ -824,7 +808,8 @@ ID_INLINE void idStr::ToLower( void ) {
 
 ID_INLINE void idStr::ToUpper( void ) {
 	for (int i = 0; data[i]; i++ ) {
-		if ( CharIsLower( data[i] ) ) {
+		// HUMANHEAD pdm: cast to unsigned for the sake of western european characters, which use the sign bit
+		if ( CharIsLower( (unsigned char)data[i] ) ) {
 			data[i] -= ( 'a' - 'A' );
 		}
 	}
@@ -934,7 +919,8 @@ ID_INLINE int idStr::Length( const char *s ) {
 
 ID_INLINE char *idStr::ToLower( char *s ) {
 	for ( int i = 0; s[i]; i++ ) {
-		if ( CharIsUpper( s[i] ) ) {
+		// HUMANHEAD pdm: cast to unsigned for the sake of western european characters, which use the sign bit
+		if ( CharIsUpper( (unsigned char)s[i] ) ) {
 			s[i] += ( 'a' - 'A' );
 		}
 	}
@@ -943,7 +929,8 @@ ID_INLINE char *idStr::ToLower( char *s ) {
 
 ID_INLINE char *idStr::ToUpper( char *s ) {
 	for ( int i = 0; s[i]; i++ ) {
-		if ( CharIsLower( s[i] ) ) {
+		// HUMANHEAD pdm: cast to unsigned for the sake of western european characters, which use the sign bit
+		if ( CharIsLower( (unsigned char)s[i] ) ) {
 			s[i] -= ( 'a' - 'A' );
 		}
 	}

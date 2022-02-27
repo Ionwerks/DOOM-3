@@ -318,6 +318,9 @@ public:
 	virtual const idMaterial *		MaterialByIndex( int index, bool forceParse = true ) = 0;
 	virtual const idDeclSkin *		SkinByIndex( int index, bool forceParse = true ) = 0;
 	virtual const idSoundShader *	SoundByIndex( int index, bool forceParse = true ) = 0;
+
+	virtual void					SetInsideLevelLoad(bool b) = 0;
+	virtual bool					GetInsideLevelLoad(void) = 0;
 };
 
 extern idDeclManager *		declManager;

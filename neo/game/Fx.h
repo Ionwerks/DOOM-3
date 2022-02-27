@@ -43,13 +43,21 @@ typedef struct {
 	renderEntity_t			renderEntity;			// used to present a model to the renderer
 	int						modelDefHandle;			// handle to static renderer model
 	float					delay;
-	int						particleSystem;
+	//HUMANHEAD: aob - made particleSystem an idDeclParticle
+	const idDeclParticle*	particleSystem;
+	int						particleStartTime;
+	//HUMANHEAD END
 	int						start;
 	bool					soundStarted;
 	bool					shakeStarted;
 	bool					decalDropped;
 	bool					launched;
 } idFXLocalAction;
+
+// HUMANHEAD PDM
+extern const idEventDef EV_Fx_KillFx;
+extern const idEventDef EV_Fx_Action;
+// HUMANHEAD END
 
 class idEntityFx : public idEntity {
 public:
@@ -65,6 +73,7 @@ public:
 
 	virtual void			Think();
 	void					Setup( const char *fx );
+	virtual //HUMANHEAD: aob - made virtual
 	void					Run( int time );
 	void					Start( int time );
 	void					Stop( void );
@@ -79,28 +88,44 @@ public:
 
 	static idEntityFx *		StartFx( const char *fx, const idVec3 *useOrigin, const idMat3 *useAxis, idEntity *ent, bool bind );
 
-protected:
-	void					Event_Trigger( idEntity *activator );
-	void					Event_ClearFx( void );
+	// HUMANHEAD: aob - all definitions are in hhEntityFx
+	virtual void			SetUseAxis(fxAxis theAxis) {}
+	virtual void			SetFxInfo(const hhFxInfo& i) {}
+	virtual bool			RemoveWhenDone() { return false; }
+	virtual void			RemoveWhenDone(bool remove) {}
+	virtual void			Toggle() {}
+	virtual void			Nozzle(bool bOn) {}
+	// HUMANHEAD END
 
-	void					CleanUp( void );
-	void					CleanUpSingleAction( const idFXSingleAction& fxaction, idFXLocalAction& laction );
-	void					ApplyFade( const idFXSingleAction& fxaction, idFXLocalAction& laction, const int time, const int actualStart );
+	//HUMANHEAD rww
+	bool					persistentNetTime;
+
+	//for functionality regarding client entity effects.
+	idEntityPtr<idEntity>	snapshotOwner;
+	//HUMANHEAD END
+protected:
+	void					Event_Trigger(idEntity* activator);
+	void					Event_ClearFx(void);
+
+	void					CleanUp(void);
+	virtual //HUMANHEAD: aob - made virtual
+		void					CleanUpSingleAction(const idFXSingleAction& fxaction, idFXLocalAction& laction);
+	void					ApplyFade(const idFXSingleAction& fxaction, idFXLocalAction& laction, const int time, const int actualStart);
 
 	int						started;
 	int						nextTriggerTime;
-	const idDeclFX *		fxEffect;				// GetFX() should be called before using fxEffect as a pointer
+	const idDeclFX* fxEffect;				// GetFX() should be called before using fxEffect as a pointer
 	idList<idFXLocalAction>	actions;
 	idStr					systemName;
 };
 
 class idTeleporter : public idEntityFx {
 public:
-	CLASS_PROTOTYPE( idTeleporter );
+	CLASS_PROTOTYPE(idTeleporter);
 
 private:
 	// teleporters to this location
-	void					Event_DoAction( idEntity *activator );
+	void					Event_DoAction(idEntity* activator);
 };
 
 #endif /* !__GAME_FX_H__ */

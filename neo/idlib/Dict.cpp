@@ -225,6 +225,41 @@ void idDict::Print() const {
 	}
 }
 
+//HUMANHEAD rww - detect and print differences between two idDicts, for debugging purposes
+/*
+================
+idDict::CompareArgs
+================
+*/
+void idDict::CompareArgs(const idDict &other) const {
+	int i;
+	int n;
+
+	n = args.Num();
+	for(i = 0; i < n; i++)
+	{
+		const char *key = args[i].GetKey().c_str();
+		const char *val = args[i].GetValue().c_str();
+		if (key)
+		{
+			idStr otherVal;
+			if (!other.GetString(key, "", otherVal))
+			{
+				idLib::common->Printf("Key '%s' (value '%s') does not exist on compared dict.\n", key, val);
+			}
+			else
+			{
+				if (strcmp(val, otherVal.c_str()))
+				{
+                    idLib::common->Printf("Key '%s' has different values on dicts. this->key is '%s', other->key is '%s'\n",
+						key, val, otherVal.c_str());
+				}
+			}
+		}
+	}
+}
+//HUMANHEAD END
+
 int KeyCompare( const idKeyValue *a, const idKeyValue *b ) {
 	return idStr::Cmp( a->GetKey(), b->GetKey() );
 }

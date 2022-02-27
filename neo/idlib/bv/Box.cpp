@@ -56,7 +56,6 @@ idBox box_zero( vec3_zero, vec3_zero, mat3_identity );
 
 */
 
-/*
 static int boxVertPlanes[8] = {
 	( (1<<0) | (1<<2) | (1<<4) ),
 	( (1<<1) | (1<<2) | (1<<4) ),
@@ -116,7 +115,6 @@ static int boxEdgeVerts[12][2] = {
 	{ 2, 6 },
 	{ 3, 7 }
 };
-*/
 
 static int boxPlaneBitsSilVerts[64][7] = {
 	{ 0, 0, 0, 0, 0, 0, 0 }, // 000000 = 0

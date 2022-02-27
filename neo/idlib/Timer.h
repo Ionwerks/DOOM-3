@@ -54,6 +54,12 @@ public:
 	double			ClockTicks( void ) const;
 	double			Milliseconds( void ) const;
 
+	// HUMANHEAD pdm: Support for profiler
+	bool			IsRunning() const	{	return state == TS_STARTED;	}
+	void			SetCT(double ct)	{	clockTicks = ct;	}
+
+	// HUMANHEAD END
+
 private:
 	static double	base;
 	enum			{

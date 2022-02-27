@@ -39,17 +39,7 @@ If you have questions concerning this license or the applicable additional terms
 //
 //===============================================================
 
-#if defined(MACOS_X) && defined(__i386__)
-/*
-============
-idSIMD_MMX::GetName
-============
-*/
-const char * idSIMD_MMX::GetName( void ) const {
-	return "MMX";
-}
-
-#elif defined(_WIN32)
+#ifdef _WIN32
 
 #define EMMS_INSTRUCTION		__asm emms
 
@@ -266,11 +256,6 @@ void VPCALL idSIMD_MMX::Memcpy( void *dest0, const void *src0, const int count0 
 		// use the regular one if we cannot copy 8 byte aligned
 		memcpy( dest0, src0, count0 );
 	}
-
-	// the MMX_Memcpy* functions use MOVNTQ, issue a fence operation
-	__asm {
-		sfence
-	}
 }
 
 /*
@@ -288,7 +273,7 @@ void VPCALL idSIMD_MMX::Memset( void* dest0, const int val, const int count0 ) {
 	byte *dest = (byte *)dest0;
 	int count = count0;
 
-	while ( count > 0 && (((int)dest) & 7) ) {
+	while( count > 0 && (((int)dest) & 7) ) {
 		*dest = val;
 		dest++;
 		count--;
@@ -350,18 +335,13 @@ loop2:
 		count &= 7;
 	}
 
-	while ( count > 0 ) {
+	while( count > 0 ) {
 		*dest = val;
 		dest++;
 		count--;
 	}
 
 	EMMS_INSTRUCTION 
-
-	// the MMX_Memcpy* functions use MOVNTQ, issue a fence operation
-	__asm {
-		sfence
-	}
 }
 
 #endif /* _WIN32 */

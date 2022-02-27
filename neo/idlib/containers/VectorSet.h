@@ -147,9 +147,9 @@ ID_INLINE int idVectorSet<type,dimension>::FindVector( const type &v, const floa
 		hashKey += (int) ( ( v[i] - mins[i] ) * boxInvSize[i] );
 	}
 
-	hash.Add( hashKey, idList<type>::Num() );
+	hash.Add( hashKey, Num() );
 	Append( v );
-	return idList<type>::Num()-1;
+	return Num()-1;
 }
 
 

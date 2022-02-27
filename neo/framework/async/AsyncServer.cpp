@@ -255,7 +255,7 @@ void idAsyncServer::ExecuteMapChange( void ) {
 	fileSystem->ClearPureChecksums();
 
 	// make sure the map/gametype combo is good
-	game->GetBestGameType( cvarSystem->GetCVarString("si_map"), cvarSystem->GetCVarString("si_gametype"), bestGameType );
+	game->GetBestGameType( cvarSystem->GetCVarString("si_map"), cvarSystem->GetCVarString("si_gametype") );
 	cvarSystem->SetCVarString("si_gametype", bestGameType );
 
 	// initialize map settings
@@ -695,7 +695,7 @@ void idAsyncServer::InitClient( int clientNum, int clientId, int clientRate ) {
 	}
 
 	// let the game know a player connected
-	game->ServerClientConnect( clientNum, client.guid );
+	game->ServerClientConnect( clientNum );
 }
 
 /*

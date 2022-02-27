@@ -41,7 +41,7 @@ If you have questions concerning this license or the applicable additional terms
 #define	PROC_FILE_ID				"mapProcFile003"
 
 // shader parms
-const int MAX_GLOBAL_SHADER_PARMS	= 12;
+const int MAX_GLOBAL_SHADER_PARMS = 13;	// HUMANHEAD pdm: increased from 12 (see also: MAX_ENTITY_SHADER_PARMS)
 
 const int SHADERPARM_RED			= 0;
 const int SHADERPARM_GREEN			= 1;
@@ -52,6 +52,40 @@ const int SHADERPARM_TIMEOFFSET		= 4;
 const int SHADERPARM_DIVERSITY		= 5;	// random between 0.0 and 1.0 for some effects (muzzle flashes, etc)
 const int SHADERPARM_MODE			= 7;	// for selecting which shader passes to enable
 const int SHADERPARM_TIME_OF_DEATH	= 7;	// for the monster skin-burn-away effect enable and time offset
+
+
+// HUMANHEAD pdm
+const int SHADERPARM_MISC = 6; // aob
+const int SHADERPARM_ANY_DEFORM = 9; // Model deformation
+const int SHADERPARM_ANY_DEFORM_PARM1 = 10; // Model deformation parameter1
+const int SHADERPARM_ANY_DEFORM_PARM2 = 11; // Model deformation parameter2
+const int SHADERPARM_DISTANCE = 12; // CJR -- distance shader parm index
+// Always add to the end of the list so the old numbers don't change
+enum {
+	DEFORMTYPE_NONE = 0,
+	DEFORMTYPE_SCALE,
+	DEFORMTYPE_VERTEXCOLOR,
+	DEFORMTYPE_SPHERE,
+	DEFORMTYPE_RIPPLE,
+	DEFORMTYPE_PLANTSWAYX,
+	DEFORMTYPE_PLANTSWAYY,
+	DEFORMTYPE_FLATTEN,
+	DEFORMTYPE_VIBRATE,
+	DEFORMTYPE_SQUISH,
+	DEFORMTYPE_TURBULENT,	// 10
+	DEFORMTYPE_RAYS,
+	DEFORMTYPE_ALPHAGLOW,
+	DEFORMTYPE_FATTEN,
+	DEFORMTYPE_RIPPLECENTER,
+	DEFORMTYPE_MELT,
+	DEFORMTYPE_POD,
+	DEFORMTYPE_DEATHEFFECT,
+	DEFORMTYPE_WINDBLAST,
+	DEFORMTYPE_PINCHPOINT,
+	DEFORMTYPE_PORTAL
+	//NOTE: Any added here should also be added to prey_defs.script
+};
+// HUMANHEAD END
 
 // model parms
 const int SHADERPARM_MD5_SKINSCALE	= 8;	// for scaling vertex offsets on md5 models (jack skellington effect)
@@ -75,6 +109,13 @@ const int MAX_RENDERENTITY_GUI		= 3;
 
 
 typedef bool(*deferredEntityCallback_t)( renderEntity_s *, const renderView_s * );
+
+// HUMANHEAD CJR:  Beam node information
+#define MAX_BEAM_NODES				32
+typedef struct hhBeamNodes_s {
+	idVec3		nodes[MAX_BEAM_NODES];
+} hhBeamNodes_t;
+// END HUMANHEAD
 
 
 typedef struct renderEntity_s {
@@ -135,7 +176,18 @@ typedef struct renderEntity_s {
 	idJointMat *			joints;					// array of joints that will modify vertices.
 													// NULL if non-deformable model.  NOT freed by renderer
 
+
 	float					modelDepthHack;			// squash depth range so particle effects don't clip into walls
+	const hhDeclBeam*		declBeam;			// HUMANHEAD beam information
+	hhBeamNodes_t*			beamNodes;			// HUMANHEAD beam node array (sized to the number of beams in the system)
+	//HUMANHEAD rww - moved other bools up here
+#if _HH_RENDERDEMO_HACKS //HUMANHEAD rww
+	bool					notInRenderDemos;		//if this is true, we will not record this renderentity
+#endif //HUMANHEAD END
+	bool					weaponDepthHack;		// squash depth range so view weapons don't poke into walls
+													// this automatically implies noShadow
+	//HUMANHEAD rww - changed to a bool to fit with our added bools, and moved in with others. considering automatic compiler alignment i don't see a real point to making this an int initially anyway.
+	bool					forceUpdate;			// force an update (NOTE: not a bool to keep this struct a multiple of 4 bytes)
 
 	// options to override surface shader flags (replace with material parameters?)
 	bool					noSelfShadow;			// cast shadows onto other objects,but not self
@@ -146,9 +198,13 @@ typedef struct renderEntity_s {
 													// for the gigantic outdoor meshes in the monorail map, so
 													// all the lights in the moving monorail don't touch the meshes
 
-	bool					weaponDepthHack;		// squash depth range so view weapons don't poke into walls
-													// this automatically implies noShadow
-	int						forceUpdate;			// force an update (NOTE: not a bool to keep this struct a multiple of 4 bytes)
+	// HUMANHEAD:
+	bool				onlyVisibleInSpirit;	// True if this entity is only visible when spiritwalking or deathwalking
+	bool				onlyInvisibleInSpirit;	// True if this entity is only invisible when spiritwalking or deathwalking -tmj
+	bool				lowSkippable;			// bjk: True if skippable in low quality
+	float				eyeDistance;			// HUMANHEAD pdm: precalculated distance to eye
+	// HUMANHEAD END
+
 	int						timeGroup;
 	int						xrayIndex;
 } renderEntity_t;
@@ -172,6 +228,8 @@ typedef struct renderLight_s {
 	// updates
 	bool					noShadows;			// (should we replace this with material parameters on the shader?)
 	bool					noSpecular;			// (should we replace this with material parameters on the shader?)
+
+	bool					lowSkippable;		// HUMANHEAD bjk: True if skippable in low quality
 
 	bool					pointLight;			// otherwise a projection light (should probably invert the sense of this, because points are way more common)
 	bool					parallel;			// lightCenter gives the direction to the light at infinity
@@ -218,6 +276,11 @@ typedef struct renderView_s {
 	bool					cramZNear;			// for cinematics, we want to set ZNear much lower
 	bool					forceUpdate;		// for an update 
 
+	bool			viewSpiritEntities; // HUMANHEAD cjr: this renderView can see all onlyVisibleInSpirit entities
+									   // tmj: this renderView cannot see onlyInvisibleInSpirit entities
+
+	float				frac;			// fraction of trace before hit
+
 	// time in milliseconds for shader effects and other time dependent rendering issues
 	int						time;
 	float					shaderParms[MAX_GLOBAL_SHADER_PARMS];		// can be used in any way by shader
@@ -238,6 +301,7 @@ typedef struct {
 typedef struct {
 	float				x, y;			// 0.0 to 1.0 range if trace hit a gui, otherwise -1
 	int					guiId;			// id of gui ( 0, 1, or 2 ) that the trace happened against
+	float				frac;
 } guiPoint_t;
 
 
@@ -323,8 +387,6 @@ public:
 	// may render composite textures for gui console screens and light projections
 	// It would also be acceptable to render a scene multiple times, for "rear view mirrors", etc
 	virtual void			RenderScene( const renderView_t *renderView ) = 0;
-
-	//-------------- Portal Area Information -----------------
 
 	// returns the number of portals
 	virtual int				NumPortals( void ) const = 0;

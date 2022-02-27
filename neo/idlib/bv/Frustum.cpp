@@ -2430,24 +2430,33 @@ void idFrustum::ClipFrustumToBox( const idBox &box, float clipFractions[4], int 
 	minf = ( dNear + 1.0f ) * invFar;
 
 	for ( i = 0; i < 4; i++ ) {
-
-		index = FLOATSIGNBITNOTSET( cornerVecs[i].x );
-		f = ( bounds[index].x - localOrigin.x ) / cornerVecs[i].x;
-		clipFractions[i] = f;
-		clipPlanes[i] = 1 << index;
-
-		index = FLOATSIGNBITNOTSET( cornerVecs[i].y );
-		f = ( bounds[index].y - localOrigin.y ) / cornerVecs[i].y;
-		if ( f < clipFractions[i] ) {
+		if (cornerVecs[i].x == 0.0f) { //HUMANHEAD rww
+			clipFractions[i] = idMath::INFINITY;
+			clipPlanes[i] = 0;
+		} //HUMANHEAD END
+		else {
+			index = FLOATSIGNBITNOTSET( cornerVecs[i].x );
+			f = ( bounds[index].x - localOrigin.x ) / cornerVecs[i].x;
 			clipFractions[i] = f;
-			clipPlanes[i] = 4 << index;
+			clipPlanes[i] = 1 << index;
 		}
 
-		index = FLOATSIGNBITNOTSET( cornerVecs[i].z );
-		f = ( bounds[index].z - localOrigin.z ) / cornerVecs[i].z;
-		if ( f < clipFractions[i] ) {
-			clipFractions[i] = f;
-			clipPlanes[i] = 16 << index;
+		if (cornerVecs[i].y != 0.0f) { //HUMANHEAD rww
+			index = FLOATSIGNBITNOTSET( cornerVecs[i].y );
+			f = ( bounds[index].y - localOrigin.y ) / cornerVecs[i].y;
+			if ( f < clipFractions[i] ) {
+				clipFractions[i] = f;
+				clipPlanes[i] = 4 << index;
+			}
+		}
+
+		if (cornerVecs[i].z != 0.0f) { //HUMANHEAD rww
+			index = FLOATSIGNBITNOTSET( cornerVecs[i].z );
+			f = ( bounds[index].z - localOrigin.z ) / cornerVecs[i].z;
+			if ( f < clipFractions[i] ) {
+				clipFractions[i] = f;
+				clipPlanes[i] = 16 << index;
+			}
 		}
 
 		// make sure the frustum is not clipped between the frustum origin and the near plane

@@ -1190,7 +1190,8 @@ idVarDef *idCompiler::LookupDef( const char *name, const idVarDef *baseobj ) {
 
 				field = LookupDef( name, scope->scope->TypeDef()->def );
 				if ( !field ) {
-					Error( "Unknown value \"%s\"", name );
+					// HUMANHEAD jrm - need to differntiate errors
+					Error( "LookupDef():: Unknown value \"%s\"", name );
 				}
 
 				// type check
@@ -1277,7 +1278,8 @@ idVarDef *idCompiler::ParseValue( void ) {
 		if ( basetype ) {
 			Error( "%s is not a member of %s", name.c_str(), basetype->TypeDef()->Name() );
 		} else {
-			Error( "Unknown value \"%s\"", name.c_str() );
+			// HUMANHEAD jrm - need to differntiate errors
+			Error( "ParseValue():: Unknown value \"%s\"", name.c_str() ); 
 		}
 	// if namespace, then look up the variable in that namespace
 	} else if ( def->Type() == ev_namespace ) {
@@ -2144,15 +2146,9 @@ void idCompiler::ParseFunctionDef( idTypeDef *returnType, const char *name ) {
 		}
 	}
 
-	// check if this is a prototype or declaration
-	if ( !CheckToken( "{" ) ) {
-		// it's just a prototype, so get the ; and move on
-		ExpectToken( ";" );
-		return;
-	}
-
 	// calculate stack space used by parms
 	numParms = type->NumParameters();
+	func->parmTotal = 0;				//POSTMERGE id fix
 	func->parmSize.SetNum( numParms );
 	for( i = 0; i < numParms; i++ ) {
 		parmType = type->GetParmType( i );
@@ -2162,6 +2158,14 @@ void idCompiler::ParseFunctionDef( idTypeDef *returnType, const char *name ) {
 			func->parmSize[ i ] = parmType->Size();
 		}
 		func->parmTotal += func->parmSize[ i ];
+	}
+	
+	//POSTMERGE id fix
+	// check if this is a prototype or declaration
+	if ( !CheckToken( "{" ) ) {
+		// it's just a prototype, so get the ; and move on
+		ExpectToken( ";" );
+		return;
 	}
 
 	// define the parms

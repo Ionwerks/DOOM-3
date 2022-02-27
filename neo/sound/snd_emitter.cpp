@@ -868,6 +868,16 @@ int idSoundEmitterLocal::StartSound( const idSoundShader *shader, const s_channe
 	return length;
 }
 
+soundShaderParms_t* idSoundEmitterLocal::GetSoundParms(idSoundShader* shader, const s_channelType channel) {
+	idSoundChannel* chan = &channels[channel]; 
+
+	return &chan->parms; // jmarshall - I think this is right?
+}
+
+void idSoundEmitterLocal::ModifySound(idSoundShader* shader, const s_channelType channel, const hhSoundShaderParmsModifier& parmModifier) {
+	// jmarshall - implement me!
+}
+
 /*
 ===================
 idSoundEmitterLocal::ModifySound

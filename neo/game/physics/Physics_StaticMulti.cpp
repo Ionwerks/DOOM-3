@@ -351,6 +351,7 @@ idPhysics_StaticMulti::Evaluate
 ================
 */
 bool idPhysics_StaticMulti::Evaluate( int timeStepMSec, int endTimeMSec ) {
+	PROFILE_SCOPE("StaticMulti", PROFMASK_PHYSICS);
 	int i;
 	idVec3 masterOrigin;
 	idMat3 masterAxis;

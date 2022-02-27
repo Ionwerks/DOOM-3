@@ -85,6 +85,10 @@ public:
 	virtual void VPCALL Memcpy( void *dst,			const void *src,		const int count );
 	virtual void VPCALL Memset( void *dst,			const int val,			const int count );
 
+	//HUMANHEAD rww
+	virtual void VPCALL Memcpy16( void *dst, const void *src, const int count );
+	//HUMANHEAD END
+
 	virtual void VPCALL Zero16( float *dst,			const int count );
 	virtual void VPCALL Negate16( float *dst,		const int count );
 	virtual void VPCALL Copy16( float *dst,			const float *src,		const int count );
@@ -113,6 +117,12 @@ public:
 	virtual void VPCALL TransformJoints( idJointMat *jointMats, const int *parents, const int firstJoint, const int lastJoint );
 	virtual void VPCALL UntransformJoints( idJointMat *jointMats, const int *parents, const int firstJoint, const int lastJoint );
 	virtual void VPCALL TransformVerts( idDrawVert *verts, const int numVerts, const idJointMat *joints, const idVec4 *weights, const int *index, const int numWeights );
+#if NEW_MESH_TRANSFORM
+	virtual void VPCALL MultiplyJoints( idJointMat * result, const idJointMat * joints1, const idJointMat * joints2, const int numJoints );
+	virtual void VPCALL TransformVertsNew( idDrawVert *verts, const int numVerts, idBounds &bounds, const idJointMat *joints, const idVec4 *base, const jointWeight_t *weights, const int numWeights );
+	virtual void VPCALL TransformVertsAndTangents( idDrawVert *verts, const int numVerts, idBounds &bounds, const idJointMat *joints, const idVec4 *base, const jointWeight_t *weights, const int numWeights );
+	virtual void VPCALL TransformVertsAndTangentsFast( idDrawVert *verts, const int numVerts, idBounds &bounds, const idJointMat *joints, const idVec4 *base, const jointWeight_t *weights, const int numWeights );
+#endif
 	virtual void VPCALL TracePointCull( byte *cullBits, byte &totalOr, const float radius, const idPlane *planes, const idDrawVert *verts, const int numVerts );
 	virtual void VPCALL DecalPointCull( byte *cullBits, const idPlane *planes, const idDrawVert *verts, const int numVerts );
 	virtual void VPCALL OverlayPointCull( byte *cullBits, idVec2 *texCoords, const idPlane *planes, const idDrawVert *verts, const int numVerts );
@@ -124,6 +134,13 @@ public:
 	virtual void VPCALL CreateSpecularTextureCoords( idVec4 *texCoords, const idVec3 &lightOrigin, const idVec3 &viewOrigin, const idDrawVert *verts, const int numVerts, const int *indexes, const int numIndexes );
 	virtual int  VPCALL CreateShadowCache( idVec4 *vertexCache, int *vertRemap, const idVec3 &lightOrigin, const idDrawVert *verts, const int numVerts );
 	virtual int  VPCALL CreateVertexProgramShadowCache( idVec4 *vertexCache, const idDrawVert *verts, const int numVerts );
+
+#if SIMD_SHADOW
+	virtual int  VPCALL ShadowVolume_CountFacing( const byte * facing, const int numFaces );
+	virtual int  VPCALL ShadowVolume_CountFacingCull( byte * facing, const int numFaces, const int * indexes, const byte * cull );
+	virtual int  VPCALL ShadowVolume_CreateSilTriangles( int * shadowIndexes, const byte * facing, const silEdge_s * silEdges, const int numSilEdges );
+	virtual int  VPCALL ShadowVolume_CreateCapTriangles( int * shadowIndexes, const byte * facing, const int * indexes, const int numIndexes );
+#endif
 
 	virtual void VPCALL UpSamplePCMTo44kHz( float *dest, const short *pcm, const int numSamples, const int kHz, const int numChannels );
 	virtual void VPCALL UpSampleOGGTo44kHz( float *dest, const float * const *ogg, const int numSamples, const int kHz, const int numChannels );

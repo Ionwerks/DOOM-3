@@ -29,6 +29,10 @@ If you have questions concerning this license or the applicable additional terms
 #ifndef __BITMSG_H__
 #define __BITMSG_H__
 
+//HUMANHEAD rww
+#define MAX_MSG_QUEUE_SIZE				16384		// must be a power of 2
+//HUMANHEAD END
+
 /*
 ===============================================================================
 
@@ -79,7 +83,6 @@ public:
 	void			WriteChar( int c );
 	void			WriteByte( int c );
 	void			WriteShort( int c );
-	void			WriteUShort( int c );
 	void			WriteLong( int c );
 	void			WriteFloat( float f );
 	void			WriteFloat( float f, int exponentBits, int mantissaBits );
@@ -108,7 +111,6 @@ public:
 	int				ReadChar( void ) const;
 	int				ReadByte( void ) const;
 	int				ReadShort( void ) const;
-	int				ReadUShort( void ) const;
 	int				ReadLong( void ) const;
 	float			ReadFloat( void ) const;
 	float			ReadFloat( int exponentBits, int mantissaBits ) const;
@@ -130,8 +132,22 @@ public:
 	int				ReadDeltaLongCounter( int oldValue ) const;
 	bool			ReadDeltaDict( idDict &dict, const idDict *base ) const;
 
+	//HUMANHEAD: aob
+	void			WriteVec3( const idVec3& vector );
+	void			WriteMat3( const idMat3& axis );
+	void			WriteBool( bool boolean );
+
+	idVec3			ReadVec3() const;
+	idMat3			ReadMat3() const;
+	bool			ReadBool() const;
+	//HUMANHEAD END
+
 	static int		DirToBits( const idVec3 &dir, int numBits );
 	static idVec3	BitsToDir( int bits, int numBits );
+
+#if !GOLD //HUMANHEAD rww
+	void			SetDebugEntType(int entType);
+#endif //HUMANHEAD END
 
 private:
 	byte *			writeData;			// pointer to data for writing
@@ -141,8 +157,13 @@ private:
 	int				writeBit;			// number of bits written to the last written byte
 	mutable int		readCount;			// number of bytes read so far
 	mutable int		readBit;			// number of bits read from the last read byte
+	int				numValueOverflows;	// number of bit value overflows
 	bool			allowOverflow;		// if false, generate an error when the message is overflowed
 	bool			overflowed;			// set to true if the buffer size failed (with allowOverflow set)
+
+#if !GOLD //HUMANHEAD rww
+	int				debugEntType;
+#endif //HUMANHEAD END
 
 private:
 	bool			CheckOverflow( int numBits );
@@ -156,12 +177,14 @@ ID_INLINE void idBitMsg::Init( byte *data, int length ) {
 	writeData = data;
 	readData = data;
 	maxSize = length;
+	numValueOverflows = 0;
 }
 
 ID_INLINE void idBitMsg::Init( const byte *data, int length ) {
 	writeData = NULL;
 	readData = data;
 	maxSize = length;
+	numValueOverflows = 0;
 }
 
 ID_INLINE byte *idBitMsg::GetData( void ) {
@@ -288,10 +311,6 @@ ID_INLINE void idBitMsg::WriteShort( int c ) {
 	WriteBits( c, -16 );
 }
 
-ID_INLINE void idBitMsg::WriteUShort( int c ) {
-	WriteBits( c, 16 );
-}
-
 ID_INLINE void idBitMsg::WriteLong( int c ) {
 	WriteBits( c, 32 );
 }
@@ -343,6 +362,24 @@ ID_INLINE void idBitMsg::WriteDeltaFloat( float oldValue, float newValue, int ex
 	WriteDelta( oldBits, newBits, 1 + exponentBits + mantissaBits );
 }
 
+//HUMANHEAD: aob
+ID_INLINE void idBitMsg::WriteVec3( const idVec3& vector ) {
+	WriteFloat( vector[0] );
+	WriteFloat( vector[1] );
+	WriteFloat( vector[2] );
+}
+
+ID_INLINE void idBitMsg::WriteMat3( const idMat3& axis ) {
+	WriteVec3( axis[0] );
+	WriteVec3( axis[1] );
+	WriteVec3( axis[2] );
+}
+
+ID_INLINE void idBitMsg::WriteBool( bool boolean ) {
+	WriteBits( boolean, 1 );
+}
+//HUMANHEAD END
+
 ID_INLINE void idBitMsg::BeginReading( void ) const {
 	readCount = 0;
 	readBit = 0;
@@ -366,10 +403,6 @@ ID_INLINE int idBitMsg::ReadByte( void ) const {
 
 ID_INLINE int idBitMsg::ReadShort( void ) const {
 	return (short)ReadBits( -16 );
-}
-
-ID_INLINE int idBitMsg::ReadUShort( void ) const {
-	return (unsigned short)ReadBits( 16 );
 }
 
 ID_INLINE int idBitMsg::ReadLong( void ) const {
@@ -427,6 +460,34 @@ ID_INLINE float idBitMsg::ReadDeltaFloat( float oldValue, int exponentBits, int 
 	return idMath::BitsToFloat( newBits, exponentBits, mantissaBits );
 }
 
+//HUMANHEAD: aob
+ID_INLINE idVec3 idBitMsg::ReadVec3() const {
+	idVec3 vector;
+	vector[0] = ReadFloat();
+	vector[1] = ReadFloat();
+	vector[2] = ReadFloat();
+	return vector;
+}
+
+ID_INLINE idMat3 idBitMsg::ReadMat3() const {
+	idMat3 axis;
+	axis[0] = ReadVec3();
+	axis[1] = ReadVec3();
+	axis[2] = ReadVec3();
+	return axis;
+}
+
+ID_INLINE bool idBitMsg::ReadBool() const {
+	int boolean = ReadBits( 1 );
+	return *(bool*)&boolean;//We seem to get a performance warning unless I do this.  Ick!
+}
+//HUMANHEAD END
+
+#if !GOLD //HUMANHEAD rww
+ID_INLINE void idBitMsg::SetDebugEntType(int entType) {
+	debugEntType = entType;
+}
+#endif //HUMANHEAD END
 
 /*
 ===============================================================================
@@ -445,11 +506,14 @@ public:
 	void			Init( const idBitMsg *base, idBitMsg *newBase, const idBitMsg *delta );
 	bool			HasChanged( void ) const;
 
+#ifdef _HH_NET_DEBUGGING //HUMANHEAD rww
+	void			BeginEntLog(int type);
+#endif //HUMANHEAD END
+
 	void			WriteBits( int value, int numBits );
 	void			WriteChar( int c );
 	void			WriteByte( int c );
 	void			WriteShort( int c );
-	void			WriteUShort( int c );
 	void			WriteLong( int c );
 	void			WriteFloat( float f );
 	void			WriteFloat( float f, int exponentBits, int mantissaBits );
@@ -474,7 +538,6 @@ public:
 	int				ReadChar( void ) const;
 	int				ReadByte( void ) const;
 	int				ReadShort( void ) const;
-	int				ReadUShort( void ) const;
 	int				ReadLong( void ) const;
 	float			ReadFloat( void ) const;
 	float			ReadFloat( int exponentBits, int mantissaBits ) const;
@@ -502,6 +565,11 @@ private:
 	const idBitMsg *readDelta;		// delta from base to new base for reading
 	mutable bool	changed;		// true if the new base is different from the base
 
+#ifdef _HH_NET_DEBUGGING //HUMANHEAD rww
+	int				entType;
+	int				writeCount;
+#endif //HUMANHEAD END
+
 private:
 	void			WriteDelta( int oldValue, int newValue, int numBits );
 	int				ReadDelta( int oldValue, int numBits ) const;
@@ -513,6 +581,11 @@ ID_INLINE idBitMsgDelta::idBitMsgDelta() {
 	writeDelta = NULL;
 	readDelta = NULL;
 	changed = false;
+
+#ifdef _HH_NET_DEBUGGING //HUMANHEAD rww
+	entType = 0;
+	writeCount = 0;
+#endif //HUMANHEAD END
 }
 
 ID_INLINE void idBitMsgDelta::Init( const idBitMsg *base, idBitMsg *newBase, idBitMsg *delta ) {
@@ -545,10 +618,6 @@ ID_INLINE void idBitMsgDelta::WriteByte( int c ) {
 
 ID_INLINE void idBitMsgDelta::WriteShort( int c ) {
 	WriteBits( c, -16 );
-}
-
-ID_INLINE void idBitMsgDelta::WriteUShort( int c ) {
-	WriteBits( c, 16 );
 }
 
 ID_INLINE void idBitMsgDelta::WriteLong( int c ) {
@@ -614,10 +683,6 @@ ID_INLINE int idBitMsgDelta::ReadShort( void ) const {
 	return (short)ReadBits( -16 );
 }
 
-ID_INLINE int idBitMsgDelta::ReadUShort( void ) const {
-	return (unsigned short)ReadBits( 16 );
-}
-
 ID_INLINE int idBitMsgDelta::ReadLong( void ) const {
 	return ReadBits( 32 );
 }
@@ -672,5 +737,42 @@ ID_INLINE float idBitMsgDelta::ReadDeltaFloat( float oldValue, int exponentBits,
 	int newBits = ReadDelta( oldBits, 1 + exponentBits + mantissaBits );
 	return idMath::BitsToFloat( newBits, exponentBits, mantissaBits );
 }
+
+//HUMANHEAD rww
+class idMsgQueue {
+public:
+					idMsgQueue();
+
+	void			Init( int sequence );
+
+	bool			Add( const byte *data, const int size );
+	bool			Get( byte *data, int &size );
+	int				GetTotalSize( void ) const;
+	int				GetSpaceLeft( void ) const;
+	int				GetFirst( void ) const { return first; }
+	int				GetLast( void ) const { return last; }
+	void			CopyToBuffer( byte *buf ) const;
+
+	void			WriteToMsg(idBitMsg &msg) const; //HUMANHEAD rww - write the queue to a bitmsg
+	void			ReadFromMsg(const idBitMsg &msg); //HUMANHEAD rww - read the queue from a bitmsg
+	bool			GetDirect( byte *data, int &size ); //HUMANHEAD rww - doesn't care about sequence
+
+private:
+	byte			buffer[MAX_MSG_QUEUE_SIZE];
+	int				first;			// sequence number of first message in queue
+	int				last;			// sequence number of last message in queue
+	int				startIndex;		// index pointing to the first byte of the first message
+	int				endIndex;		// index pointing to the first byte after the last message
+
+	void			WriteByte( byte b );
+	byte			ReadByte( void );
+	void			WriteShort( int s );
+	int				ReadShort( void );
+	void			WriteLong( int l );
+	int				ReadLong( void );
+	void			WriteData( const byte *data, const int size );
+	void			ReadData( byte *data, const int size );
+};
+//HUMANHEAD END
 
 #endif /* !__BITMSG_H__ */

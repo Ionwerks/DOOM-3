@@ -274,7 +274,7 @@ idHierarchy<type> *idHierarchy<type>::GetPriorSiblingNode( void ) const {
 	}
 
 	if ( node != this ) {
-		idLib::Error( "idHierarchy::GetPriorSibling: could not find node in parent's list of children" );
+		idLib::common->Error( "idHierarchy::GetPriorSibling: could not find node in parent's list of children" );
 	}
 
 	return prev;

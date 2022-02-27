@@ -602,6 +602,17 @@ void VPCALL idSIMD_Generic::Memset( void *dst, const int val, const int count ) 
 	memset( dst, val, count );
 }
 
+//HUMANHEAD rww
+/*
+================
+idSIMD_Generic::Memcpy16
+================
+*/
+void VPCALL idSIMD_Generic::Memcpy16( void *dst, const void *src, const int count ) {
+	Memcpy(dst, src, count); //fall back to mmx if possible, otherwise fall into the normal memcpy
+}
+//HUMANHEAD END
+
 /*
 ============
 idSIMD_Generic::Zero16
@@ -2331,6 +2342,119 @@ void VPCALL idSIMD_Generic::TransformVerts( idDrawVert *verts, const int numVert
 	}
 }
 
+#if NEW_MESH_TRANSFORM
+/*
+============
+idSIMD_Generic::MultiplyJoints
+============
+*/
+void VPCALL idSIMD_Generic::MultiplyJoints( idJointMat * result, const idJointMat * joints1, const idJointMat * joints2, const int numJoints ) {
+	int i;
+
+	for ( i = 0; i < numJoints; i++ ) {
+		idJointMat::Multiply( result[i], joints1[i], joints2[i] );
+	}
+}
+
+/*
+============
+idBounds_AddPoint
+============
+*/
+ID_INLINE void idBounds_AddPoint( idBounds &b, const idVec3 &v ) {
+	float p = ( b[0].x + v.x ) * 0.5f;
+	b[0].x = p - fabs( b[0].x - p );
+	float q = ( b[0].y + v.y ) * 0.5f;
+	b[0].y = q - fabs( b[0].y - q );
+	float r = ( b[0].z + v.z ) * 0.5f;
+	b[0].z = r - fabs( b[0].z - r );
+	float s = ( b[1].x + v.x ) * 0.5f;
+	b[1].x = s + fabs( b[1].x - s );
+	float t = ( b[1].y + v.y ) * 0.5f;
+	b[1].y = t + fabs( b[1].y - t );
+	float u = ( b[1].z + v.z ) * 0.5f;
+	b[1].z = u + fabs( b[1].z - u );
+}
+
+/*
+============
+idSIMD_Generic::TransformVertsNew
+============
+*/
+void VPCALL idSIMD_Generic::TransformVertsNew( idDrawVert * verts, const int numVerts, idBounds &bounds, const idJointMat * joints, const idVec4 * base, const jointWeight_t * weights, int numWeights ) {
+	int i, j;
+	const byte * jointsPtr = (byte *)joints;
+
+	bounds.Zero();
+	for( j = 0, i = 0; i < numVerts; i++, j++ ) {
+		idVec3 v;
+
+		v = ( *(idJointMat *) ( jointsPtr + weights[j].jointMatOffset ) ) * base[j];
+		while( weights[j].nextVertexOffset != JOINTWEIGHT_SIZE ) {
+			j++;
+			v += ( *(idJointMat *) ( jointsPtr + weights[j].jointMatOffset ) ) * base[j];
+		}
+
+		verts[i].xyz = v;
+
+		idBounds_AddPoint( bounds, v );
+	}
+}
+
+/*
+============
+idSIMD_Generic::TransformVertsAndTangents
+============
+*/
+void VPCALL idSIMD_Generic::TransformVertsAndTangents( idDrawVert * verts, const int numVerts, idBounds &bounds, const idJointMat * joints, const idVec4 * base, const jointWeight_t * weights, const int numWeights ) {
+	int i, j;
+	const byte * jointsPtr = (byte *)joints;
+
+	bounds.Zero();
+	for( j = i = 0; i < numVerts; i++, j++ ) {
+		idJointMat mat;
+
+		idJointMat::Mul( mat, *(idJointMat *) ( jointsPtr + weights[j].jointMatOffset ), weights[j].weight );
+		while( weights[j].nextVertexOffset != JOINTWEIGHT_SIZE ) {
+			j++;
+			idJointMat::Mad( mat, *(idJointMat *) ( jointsPtr + weights[j].jointMatOffset ), weights[j].weight );
+		}
+
+		verts[i].xyz = mat * base[i*4+0];
+		verts[i].normal = mat * base[i*4+1];
+		verts[i].tangents[0] = mat * base[i*4+2];
+		verts[i].tangents[1] = mat * base[i*4+3];
+
+		idBounds_AddPoint( bounds, verts[i].xyz );
+	}
+}
+
+/*
+============
+idSIMD_Generic::TransformVertsAndTangentsFast
+============
+*/
+void VPCALL idSIMD_Generic::TransformVertsAndTangentsFast( idDrawVert * verts, const int numVerts, idBounds &bounds, const idJointMat * joints, const idVec4 * base, const jointWeight_t * weights, const int numWeights ) {
+	int i;
+	const byte * jointsPtr = (byte *)joints;
+	const byte * weightsPtr = (byte *)weights;
+
+	bounds.Zero();
+	for( i = 0; i < numVerts; i++ ) {
+		const idJointMat &mat = *(idJointMat *) ( jointsPtr + ((jointWeight_t *)weightsPtr)->jointMatOffset );
+
+		weightsPtr += ((jointWeight_t *)weightsPtr)->nextVertexOffset;
+
+		verts[i].xyz = mat * base[i*4+0];
+		verts[i].normal = mat * base[i*4+1];
+		verts[i].tangents[0] = mat * base[i*4+2];
+		verts[i].tangents[1] = mat * base[i*4+3];
+
+		idBounds_AddPoint( bounds, verts[i].xyz );
+	}
+}
+#endif
+
 /*
 ============
 idSIMD_Generic::TracePointCull
@@ -2837,6 +2961,117 @@ int VPCALL idSIMD_Generic::CreateVertexProgramShadowCache( idVec4 *vertexCache, 
 	}
 	return numVerts * 2;
 }
+
+#if SIMD_SHADOW
+/*
+============
+idSIMD_Generic::ShadowVolume_CountFacing
+============
+*/
+int VPCALL idSIMD_Generic::ShadowVolume_CountFacing( const byte * facing, const int numFaces ) {
+	int i, n;
+
+	n = 0;
+	for ( i = 0; i < numFaces; i++ ) {
+		n += facing[i];
+	}
+	return n;
+}
+
+/*
+============
+idSIMD_Generic::ShadowVolume_CountFacingCull
+============
+*/
+int VPCALL idSIMD_Generic::ShadowVolume_CountFacingCull( byte * facing, const int numFaces, const int * indexes, const byte * cull ) {
+	int i, n;
+
+	n = 0;
+	for ( i = 0; i < numFaces; i++ ) {
+		if ( !facing[i] ) {
+			int	i1 = indexes[0];
+			int	i2 = indexes[1];
+			int	i3 = indexes[2];
+			if ( cull[i1] & cull[i2] & cull[i3] ) {
+				facing[i] = 1;
+				n++;
+			}
+		} else {
+			n++;
+		}
+		indexes += 3;
+	}
+	return n;
+}
+
+/*
+============
+idSIMD_Generic::ShadowVolume_CreateSilTriangles
+============
+*/
+int VPCALL idSIMD_Generic::ShadowVolume_CreateSilTriangles( int * shadowIndexes, const byte * facing, const silEdge_s * silEdges, const int numSilEdges ) {
+	int i;
+	const silEdge_t * sil;
+	int * si;
+
+	si = shadowIndexes;
+	for ( sil = ( silEdge_t * )silEdges, i = numSilEdges; i > 0; i--, sil++ ) {
+
+		int f1 = facing[sil->p1];
+		int f2 = facing[sil->p2];
+
+		if ( !( f1 ^ f2 ) ) {
+			continue;
+		}
+
+		int v1 = sil->v1 << 1;
+		int v2 = sil->v2 << 1;
+
+		// set the two triangle winding orders based on facing
+		// without using a poorly-predictable branch
+
+		si[0] = v1;
+		si[1] = v2 ^ f1;
+		si[2] = v2 ^ f2;
+		si[3] = v1 ^ f2;
+		si[4] = v1 ^ f1;
+		si[5] = v2 ^ 1;
+
+		si += 6;
+	}
+	return si - shadowIndexes;
+}
+
+/*
+============
+idSIMD_Generic::ShadowVolume_CreateCapTriangles
+============
+*/
+int VPCALL idSIMD_Generic::ShadowVolume_CreateCapTriangles( int * shadowIndexes, const byte * facing, const int * indexes, const int numIndexes ) {
+	int i, j;
+	int * si;
+
+	si = shadowIndexes;
+	for ( i = 0, j = 0; i < numIndexes; i += 3, j++ ) {
+		if ( facing[j] ) {
+			continue;
+		}
+
+		int i0 = indexes[i+0] << 1;
+		si[2] = i0;
+		si[3] = i0 ^ 1;
+		int i1 = indexes[i+1] << 1;
+		si[1] = i1;
+		si[4] = i1 ^ 1;
+		int i2 = indexes[i+2] << 1;
+		si[0] = i2;
+		si[5] = i2 ^ 1;
+
+		si += 6;
+	}
+	return si - shadowIndexes;
+}
+#endif
 
 /*
 ============

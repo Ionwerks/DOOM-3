@@ -290,13 +290,16 @@ void idWeapon::Save( idSaveGame *savefile ) const {
 	savefile->WriteInt( brassDelay );
 	savefile->WriteString( icon );
 
-	savefile->WriteInt( guiLightHandle );
+	//HUMANHEAD PCF mdl 05/04/06 - Don't save light handles
+	//savefile->WriteInt( guiLightHandle );
 	savefile->WriteRenderLight( guiLight );
 
-	savefile->WriteInt( muzzleFlashHandle );
+	//HUMANHEAD PCF mdl 05/04/06 - Don't save light handles
+	//savefile->WriteInt( muzzleFlashHandle );
 	savefile->WriteRenderLight( muzzleFlash );
 
-	savefile->WriteInt( worldMuzzleFlashHandle );
+	//HUMANHEAD PCF mdl 05/04/06 - Don't save light handles
+	//savefile->WriteInt( worldMuzzleFlashHandle );
 	savefile->WriteRenderLight( worldMuzzleFlash );
 
 	savefile->WriteVec3( flashColor );
@@ -368,6 +371,10 @@ void idWeapon::Save( idSaveGame *savefile ) const {
 	savefile->WriteBool( allowDrop );
 	savefile->WriteObject( projectileEnt );
 
+	// HUMANHEAD mdl
+	savefile->WriteInt( idleBob );
+	savefile->WriteBool( bHasRemoteView );
+	// HUMANHEAD end
 }
 
 /*
@@ -393,6 +400,7 @@ void idWeapon::Restore( idRestoreGame *savefile ) {
 	WEAPON_NETFIRING.LinkTo(	scriptObject, "WEAPON_NETFIRING" );
 	WEAPON_RAISEWEAPON.LinkTo(	scriptObject, "WEAPON_RAISEWEAPON" );
 	WEAPON_LOWERWEAPON.LinkTo(	scriptObject, "WEAPON_LOWERWEAPON" );
+	WEAPON_NEXTATTACK.LinkTo(	scriptObject, "nextAttack" ); //HUMANHEAD rww
 
 	savefile->ReadObject( reinterpret_cast<idClass *&>( owner ) );
 	worldModel.Restore( savefile );
@@ -422,6 +430,11 @@ void idWeapon::Restore( idRestoreGame *savefile ) {
 	idStr objectname;
 	savefile->ReadString( objectname );
 	weaponDef = gameLocal.FindEntityDef( objectname );
+	// HUMANHEAD mdl:  Added NULL check
+	if ( !weaponDef ) {
+		gameLocal.Error( "weaponDef not found:  %s\n", objectname.c_str() );
+	}
+	// HUMANHEAD END
 	meleeDef = gameLocal.FindEntityDef( weaponDef->dict.GetString( "def_melee" ), false );
 
 	const idDeclEntityDef *projectileDef = gameLocal.FindEntityDef( weaponDef->dict.GetString( "def_projectile" ), false );
@@ -443,13 +456,16 @@ void idWeapon::Restore( idRestoreGame *savefile ) {
 	savefile->ReadInt( brassDelay );
 	savefile->ReadString( icon );
 
-	savefile->ReadInt( guiLightHandle );
+	//HUMANHEAD PCF mdl 05/04/06 - Don't save light handles
+	//savefile->ReadInt( guiLightHandle );
 	savefile->ReadRenderLight( guiLight );
 
-	savefile->ReadInt( muzzleFlashHandle );
+	//HUMANHEAD PCF mdl 05/04/06 - Don't save light handles
+    //savefile->ReadInt( muzzleFlashHandle );
 	savefile->ReadRenderLight( muzzleFlash );
 
-	savefile->ReadInt( worldMuzzleFlashHandle );
+	//HUMANHEAD PCF mdl 05/04/06 - Don't save light handles
+	//savefile->ReadInt( worldMuzzleFlashHandle );
 	savefile->ReadRenderLight( worldMuzzleFlash );
 
 	savefile->ReadVec3( flashColor );
@@ -547,6 +563,7 @@ void idWeapon::Clear( void ) {
 	WEAPON_NETFIRING.Unlink();
 	WEAPON_RAISEWEAPON.Unlink();
 	WEAPON_LOWERWEAPON.Unlink();
+	WEAPON_NEXTATTACK.Unlink(); //HUMANHEAD rww
 
 	if ( muzzleFlashHandle != -1 ) {
 		gameRenderWorld->FreeLightDef( muzzleFlashHandle );
@@ -773,6 +790,11 @@ void idWeapon::GetWeaponDef( const char *objectname, int ammoinclip ) {
 	assert( owner );
 
 	weaponDef			= gameLocal.FindEntityDef( objectname );
+	// HUMANHEAD mdl:  Added NULL check
+	if ( !weaponDef ) {
+		gameLocal.Error( "weaponDef not found:  %s\n", objectname );
+	}
+	// HUMANHEAD END
 
 	ammoType			= GetAmmoNumForName( weaponDef->dict.GetString( "ammoType" ) );
 	ammoRequired		= weaponDef->dict.GetInt( "ammoRequired" );
@@ -990,6 +1012,7 @@ void idWeapon::GetWeaponDef( const char *objectname, int ammoinclip ) {
 	WEAPON_NETFIRING.LinkTo(	scriptObject, "WEAPON_NETFIRING" );
 	WEAPON_RAISEWEAPON.LinkTo(	scriptObject, "WEAPON_RAISEWEAPON" );
 	WEAPON_LOWERWEAPON.LinkTo(	scriptObject, "WEAPON_LOWERWEAPON" );
+	WEAPON_NEXTATTACK.LinkTo(	scriptObject, "nextAttack" ); //HUMANHEAD rww
 
 	spawnArgs = weaponDef->dict;
 
@@ -1159,6 +1182,17 @@ bool idWeapon::UpdateSkin( void ) {
 
 	return true;
 }
+
+//HUMANHEAD rww
+/*
+================
+idWeapon::GetClipBits
+================
+*/
+int idWeapon::GetClipBits(void) const {
+	return ASYNC_PLAYER_INV_CLIP_BITS;
+}
+//HUMANHEAD END
 
 /*
 ================
@@ -1724,6 +1758,12 @@ Can be overridden by subclasses when a thread doesn't need to be allocated.
 idThread *idWeapon::ConstructScriptObject( void ) {
 	const function_t *constructor;
 
+	//HUMANHEAD: aob
+	if( !thread ) {
+		return thread;
+	}
+	//HUMANHEAD END
+
 	thread->EndThread();
 
 	// call script object's constructor
@@ -1886,8 +1926,10 @@ void idWeapon::PresentWeapon( bool showViewModel ) {
 	}
 	viewWeaponOrigin += hideOffset * viewWeaponAxis[ 2 ];
 
+#if !HUMANHEAD // called from physics now
 	// kick up based on repeat firing
 	MuzzleRise( viewWeaponOrigin, viewWeaponAxis );
+#endif
 
 	// set the physics position and orientation
 	GetPhysics()->SetOrigin( viewWeaponOrigin );
@@ -2251,7 +2293,7 @@ idWeapon::WriteToSnapshot
 ================
 */
 void idWeapon::WriteToSnapshot( idBitMsgDelta &msg ) const {
-	msg.WriteBits( ammoClip, ASYNC_PLAYER_INV_CLIP_BITS );
+	msg.WriteBits( ammoClip, GetClipBits() ); //HUMANHEAD rww
 	msg.WriteBits( worldModel.GetSpawnId(), 32 );
 	msg.WriteBits( lightOn, 1 );
 	msg.WriteBits( isFiring ? 1 : 0, 1 );
@@ -2263,7 +2305,7 @@ idWeapon::ReadFromSnapshot
 ================
 */
 void idWeapon::ReadFromSnapshot( const idBitMsgDelta &msg ) {	
-	ammoClip = msg.ReadBits( ASYNC_PLAYER_INV_CLIP_BITS );
+	ammoClip = msg.ReadBits( GetClipBits() ); //HUMANHEAD rww
 	worldModel.SetSpawnId( msg.ReadBits( 32 ) );
 	bool snapLight = msg.ReadBits( 1 ) != 0;
 	isFiring = msg.ReadBits( 1 ) != 0;
@@ -2275,11 +2317,6 @@ void idWeapon::ReadFromSnapshot( const idBitMsgDelta &msg ) {
 		if ( !WEAPON_NETFIRING && isFiring ) {
 			idealState = "Fire";
 		}
-
-        // immediately switch back to idle
-        if ( WEAPON_NETFIRING && !isFiring ) {
-            idealState = "Idle";
-        }
 
 		WEAPON_NETFIRING = isFiring;
 	}
@@ -2901,7 +2938,7 @@ void idWeapon::Event_LaunchProjectiles( int num_projectiles, float spread, float
 
 		float spreadRad = DEG2RAD( spread );
 		for( i = 0; i < num_projectiles; i++ ) {
-			ang = idMath::Sin( spreadRad * gameLocal.random.RandomFloat() );
+			ang = idMath::Sin( spreadRad * idMath::Sin( gameLocal.random.RandomFloat() ) );	// HUMANHEAD bjk: uniform distro
 			spin = (float)DEG2RAD( 360.0f ) * gameLocal.random.RandomFloat();
 			dir = playerViewAxis[ 0 ] + playerViewAxis[ 2 ] * ( ang * idMath::Sin( spin ) ) - playerViewAxis[ 1 ] * ( ang * idMath::Cos( spin ) );
 			dir.Normalize();
@@ -2975,7 +3012,7 @@ void idWeapon::Event_Melee( void ) {
 
 	if ( !gameLocal.isClient ) {
 		idVec3 start = playerViewOrigin;
-		idVec3 end = start + playerViewAxis[0] * ( meleeDistance * owner->PowerUpModifier( MELEE_DISTANCE ) );
+		idVec3 end = start + playerViewAxis[0] * ( meleeDistance /* * owner->PowerUpModifier( MELEE_DISTANCE )*/ );	// HUMANHEAD pdm: not used
 		gameLocal.clip.TracePoint( tr, start, end, MASK_SHOT_RENDERMODEL, owner );
 		if ( tr.fraction < 1.0f ) {
 			ent = gameLocal.GetTraceEntity( tr );
@@ -2996,7 +3033,7 @@ void idWeapon::Event_Melee( void ) {
 		if ( ent ) {
 
 			float push = meleeDef->dict.GetFloat( "push" );
-			idVec3 impulse = -push * owner->PowerUpModifier( SPEED ) * tr.c.normal;
+			idVec3 impulse = -push /* * owner->PowerUpModifier( SPEED )*/ * tr.c.normal;	// HUMANHEAD pdm: not used
 
 			if ( gameLocal.world->spawnArgs.GetBool( "no_Weapons" ) && ( ent->IsType( idActor::Type ) || ent->IsType( idAFAttachment::Type) ) ) {
 				idThread::ReturnInt( 0 );
@@ -3009,7 +3046,7 @@ void idWeapon::Event_Melee( void ) {
 			if ( gameLocal.isMultiplayer
 				&& weaponDef && weaponDef->dict.GetBool( "stealing" )
 				&& ent->IsType( idPlayer::Type )
-				&& !owner->PowerUpActive( BERSERK )
+//				&& !owner->PowerUpActive( BERSERK )	// HUMANHEAD pdm: not used
 				&& ( gameLocal.gameType != GAME_TDM || gameLocal.serverInfo.GetBool( "si_teamDamage" ) || ( owner->team != static_cast< idPlayer * >( ent )->team ) )
 				) {
 				owner->StealWeapon( static_cast< idPlayer * >( ent ) );
@@ -3019,7 +3056,7 @@ void idWeapon::Event_Melee( void ) {
 				idVec3 kickDir, globalKickDir;
 				meleeDef->dict.GetVector( "kickDir", "0 0 0", kickDir );
 				globalKickDir = muzzleAxis * kickDir;
-				ent->Damage( owner, owner, globalKickDir, meleeDefName, owner->PowerUpModifier( MELEE_DAMAGE ), tr.c.id );
+				ent->Damage( owner, owner, globalKickDir, meleeDefName, 1/*owner->PowerUpModifier( MELEE_DAMAGE )*/, tr.c.id );	// HUMANHEAD pdm: not used
 				hit = true;
 			}
 
@@ -3027,7 +3064,9 @@ void idWeapon::Event_Melee( void ) {
 
 				if ( ent->spawnArgs.GetBool( "bleed" ) ) {
 
-					hitSound = meleeDef->dict.GetString( owner->PowerUpActive( BERSERK ) ? "snd_hit_berserk" : "snd_hit" );
+// HUMANHEAD pdm: not used
+//					hitSound = meleeDef->dict.GetString( owner->PowerUpActive( BERSERK ) ? "snd_hit_berserk" : "snd_hit" );
+					hitSound = meleeDef->dict.GetString( "snd_hit" );
 
 					ent->AddDamageEffect( tr, impulse, meleeDef->dict.GetString( "classname" ) );
 
@@ -3154,7 +3193,7 @@ void idWeapon::Event_IsInvisible( void ) {
 		idThread::ReturnFloat( 0 );
 		return;
 	}
-	idThread::ReturnFloat( owner->PowerUpActive( INVISIBILITY ) ? 1 : 0 );
+	idThread::ReturnFloat( 0 );	// HUMANHEAD pdm: removed powerup
 }
 
 /*

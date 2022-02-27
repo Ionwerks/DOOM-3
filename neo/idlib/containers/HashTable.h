@@ -60,7 +60,7 @@ public:
 					// the entire contents can be itterated over, but note that the
 					// exact index for a given element may change when new elements are added
 	int				Num( void ) const;
-	Type *			GetIndex( int index ) const;
+	Type *			GetIndex( int index, const idStr **key = NULL ) const; //HUMANHEAD mdl:  Added ability to retrieve key for saving hashtables.
 
 	int				GetSpread( void ) const;
 
@@ -245,7 +245,7 @@ exact index for a given element may change when new elements are added
 ================
 */
 template< class Type >
-ID_INLINE Type *idHashTable<Type>::GetIndex( int index ) const {
+ID_INLINE Type *idHashTable<Type>::GetIndex( int index, const idStr **key ) const {
 	hashnode_s	*node;
 	int			count;
 	int			i;
@@ -259,12 +259,22 @@ ID_INLINE Type *idHashTable<Type>::GetIndex( int index ) const {
 	for( i = 0; i < tablesize; i++ ) {
 		for( node = heads[ i ]; node != NULL; node = node->next ) {
 			if ( count == index ) {
+				//HUMANHEAD mdl
+				if ( key ) {
+					*key = &node->key;
+				}
+				//HUMANHEAD END
 				return &node->value;
 			}
 			count++;
 		}
 	}
 
+	//HUMANHEAD mdl
+	if ( key ) {
+		*key = NULL;
+	}
+	//HUMANHEAD END
 	return NULL;
 }
 
@@ -362,11 +372,6 @@ ID_INLINE int idHashTable<Type>::Num( void ) const {
 	return numentries;
 }
 
-#if defined(ID_TYPEINFO)
-#define __GNUC__ 99
-#endif
-
-#if !defined(__GNUC__) || __GNUC__ < 4
 /*
 ================
 idHashTable<Type>::GetSpread
@@ -395,10 +400,5 @@ int idHashTable<Type>::GetSpread( void ) const {
 	}
 	return 100 - (error * 100 / numentries);
 }
-#endif
-
-#if defined(ID_TYPEINFO)
-#undef __GNUC__
-#endif
 
 #endif /* !__HASHTABLE_H__ */

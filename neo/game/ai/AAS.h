@@ -41,7 +41,8 @@ enum {
 	PATHTYPE_WALK,
 	PATHTYPE_WALKOFFLEDGE,
 	PATHTYPE_BARRIERJUMP,
-	PATHTYPE_JUMP
+	PATHTYPE_JUMP,
+	PATHTYPE_FLY				// HUMANHEAD nla
 };
 
 typedef struct aasPath_s {
@@ -71,6 +72,7 @@ public:
 };
 
 typedef int aasHandle_t;
+class hhPathApproach;	// HUMANHEAD jrm
 
 class idAAS {
 public:

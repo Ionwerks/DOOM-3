@@ -324,7 +324,12 @@ int idCollisionModelManagerLocal::RotateEdgeThroughEdge( cm_traceWork_t *tw, con
 			q = - b - sqrtd;
 		}
 		frac1 = q / a;
-		frac2 = c / q;
+		if (q == 0.0f) { //HUMANHEAD rww - CUFPF
+			frac2 = 0.0f;
+		}
+		else {
+			frac2 = c / q;
+		}
 	}
 
 	if ( tw->angle < 0.0f ) {
@@ -1263,7 +1268,7 @@ void idCollisionModelManagerLocal::Rotation180( trace_t *results, const idVec3 &
 	cm_trmPolygon_t *poly;
 	cm_trmEdge_t *edge;
 	cm_trmVertex_t *vert;
-	ALIGN16( static cm_traceWork_t tw );
+	ALIGN16( static cm_traceWork_t tw; )
 
 	if ( model < 0 || model > MAX_SUBMODELS || model > idCollisionModelManagerLocal::maxModels ) {
 		common->Printf("idCollisionModelManagerLocal::Rotation180: invalid model handle\n");
@@ -1637,7 +1642,7 @@ void idCollisionModelManagerLocal::Rotation( trace_t *results, const idVec3 &sta
 	if ( cm_debugCollision.GetBool() ) {
 		if ( !entered ) {
 			entered = 1;
-			// if already messed up to begin with
+			// if already fucked up to begin with
 			if ( idCollisionModelManagerLocal::Contents( start, trm, trmAxis, -1, model, modelOrigin, modelAxis ) & contentMask ) {
 				startsolid = true;
 			}

@@ -732,6 +732,14 @@ public:
 	virtual void			GetCardCaps( bool &oldCard, bool &nv10or20 );
 	virtual bool			UploadImage( const char *imageName, const byte *data, int width, int height );
 
+	virtual void			SetEntireSceneMaterial(idMaterial* material) { }; // HUMANHEAD CJR
+	virtual bool			IsScopeView() { return false; };// HUMANHEAD CJR
+	virtual void			SetScopeView(bool view) { }; // HUMANHEAD CJR
+	virtual bool			IsShuttleView() { return false; };// HUMANHEAD CJR
+	virtual void			SetShuttleView(bool view) { };
+	virtual bool			SupportsFragmentPrograms(void) { return false; };// HUMANHEAD CJR
+	virtual int				VideoCardNumber(void) { return 0; }
+
 public:
 	// internal functions
 							idRenderSystemLocal( void );

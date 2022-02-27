@@ -56,7 +56,7 @@ public:
 
 	virtual void	ShowEditingDialog( void );
 
-private:
+protected:	//HUMANHEAD: aob - made protected
 	float			lastSoundVol;
 	float			soundVol;
 	float			random;

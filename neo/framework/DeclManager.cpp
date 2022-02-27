@@ -195,6 +195,9 @@ public:
 	virtual const idDecl*		FindDeclWithoutParsing( declType_t type, const char *name, bool makeDefault = true );
 	virtual void				ReloadFile( const char* filename, bool force );
 
+	virtual void					SetInsideLevelLoad(bool b) { inLevelLoad = b; }
+	virtual bool					GetInsideLevelLoad(void) { return inLevelLoad; }
+
 	virtual void				ListType( const idCmdArgs &args, declType_t type );
 	virtual void				PrintType( const idCmdArgs &args, declType_t type );
 
@@ -236,6 +239,8 @@ private:
 	bool						insideLevelLoad;
 
 	static idCVar				decl_show;
+
+	bool						inLevelLoad;
 
 private:
 	static void					ListDecls_f( const idCmdArgs &args );
@@ -793,6 +798,8 @@ void idDeclManagerLocal::Init( void ) {
 	common->Printf( "----- Initializing Decls -----\n" );
 
 	checksum = 0;
+
+	inLevelLoad = false;
 
 #ifdef USE_COMPRESSED_DECLS
 	SetupHuffman();

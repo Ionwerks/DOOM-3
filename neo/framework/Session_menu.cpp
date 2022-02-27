@@ -321,7 +321,7 @@ void idSessionLocal::SetMainMenuGuiVars( void ) {
 	// Mods Menu
 	SetModsMenuGuiVars();
 
-	guiMsg->SetStateString( "visible_hasxp", fileSystem->HasD3XP() ? "1" : "0" );
+	//guiMsg->SetStateString( "visible_hasxp", fileSystem->HasD3XP() ? "1" : "0" );
 
 #if defined( __linux__ )
 	guiMainMenu->SetStateString( "driver_prompt", "1" );
@@ -577,7 +577,7 @@ void idSessionLocal::HandleMainMenuCommands( const char *menuCommand ) {
 
 		// always let the game know the command is being run
 		if ( game ) {
-			game->HandleMainMenuCommands( cmd, guiActive );
+		//	game->HandleMainMenuCommands( cmd, guiActive );
 		}
 		
 		if ( !idStr::Icmp( cmd, "startGame" ) ) {

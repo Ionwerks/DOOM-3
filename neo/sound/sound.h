@@ -64,7 +64,70 @@ typedef struct {
 	float					shakes;
 	int						soundShaderFlags;		// SSF_* bit flags
 	int						soundClass;				// for global fading of sounds
+	int						subIndex;
+	int						profanityIndex;			// HUMANHEAD pdm
+	float					profanityDelay;			// HUMANHEAD pdm
+	float					profanityDuration;		// HUMANHEAD pdm
 } soundShaderParms_t;
+
+//HUMANHEAD: aob
+class hhSoundShaderParmsModifier {
+public:
+	hhSoundShaderParmsModifier() {
+		memset(&parms, 0, sizeof(soundShaderParms_t));
+		minDistanceIsSet = false;
+		maxDistanceIsSet = false;
+		volumeIsSet = false;
+		shakesIsSet = false;
+		soundShaderFlagsIsSet = false;
+	}
+
+
+	void				ModifyParms(soundShaderParms_t& parmsToModify) const {
+		if (MinDistanceIsSet()) {
+			parmsToModify.minDistance = parms.minDistance;
+		}
+
+		if (MaxDistanceIsSet()) {
+			parmsToModify.maxDistance = parms.maxDistance;
+		}
+
+		if (VolumeIsSet()) {
+			parmsToModify.volume = parms.volume;
+		}
+
+		if (ShakesIsSet()) {
+			parmsToModify.shakes = parms.shakes;
+		}
+
+		if (SoundShaderFlagsIsSet()) {
+			parmsToModify.soundShaderFlags = parms.soundShaderFlags;
+		}
+	}
+
+
+	void				SetMinDistance(const float minDistance) { parms.minDistance = minDistance; minDistanceIsSet = true; }
+	void				SetMaxDistance(const float maxDistance) { parms.maxDistance = maxDistance; maxDistanceIsSet = true; }
+	void				SetVolume(const float volume) { parms.volume = volume; volumeIsSet = true; }
+	void				SetShakes(const float shakes) { parms.shakes = shakes; shakesIsSet = true; }
+	void				SetSoundShaderFlags(const int soundShaderFlags) { parms.soundShaderFlags = soundShaderFlags; soundShaderFlagsIsSet = true; }
+
+	bool				MinDistanceIsSet() const { return minDistanceIsSet; }
+	bool				MaxDistanceIsSet() const { return maxDistanceIsSet; }
+	bool				VolumeIsSet() const { return volumeIsSet; }
+	bool				ShakesIsSet() const { return shakesIsSet; }
+	bool				SoundShaderFlagsIsSet() const { return soundShaderFlagsIsSet; }
+
+protected:
+	soundShaderParms_t	parms;
+	bool				minDistanceIsSet;
+	bool				maxDistanceIsSet;
+	bool				volumeIsSet;
+	bool				shakesIsSet;
+	bool				soundShaderFlagsIsSet;
+
+};
+//HUMANHEAD END
 
 
 const int		SOUND_MAX_LIST_WAVS		= 32;
@@ -105,6 +168,8 @@ public:
 	virtual const char *	GetSound( int index ) const;
 
 	virtual bool			CheckShakesAndOgg( void ) const;
+
+	float					GetVolume(void) const { return parms.volume; }
 
 private:
 	friend class idSoundWorldLocal;
@@ -168,6 +233,9 @@ public:
 	virtual void			StopSound( const s_channelType channel ) = 0;
 	// to is in Db (sigh), over is in seconds
 	virtual void			FadeSound( const s_channelType channel, float to, float over ) = 0;
+
+	virtual void		ModifySound(idSoundShader* shader, const s_channelType channel, const hhSoundShaderParmsModifier& parmModifier) = 0;
+	virtual soundShaderParms_t* GetSoundParms(idSoundShader* shader, const s_channelType channel) = 0;
 
 	// returns true if there are any sounds playing from this emitter.  There is some conservative
 	// slop at the end to remove inconsistent race conditions with the sound thread updates.

@@ -39,8 +39,8 @@ If you have questions concerning this license or the applicable additional terms
 
 // default scripts
 #define SCRIPT_DEFAULTDEFS			"script/doom_defs.script"
-#define SCRIPT_DEFAULT				"script/doom_main.script"
-#define SCRIPT_DEFAULTFUNC			"doom_main"
+#define SCRIPT_DEFAULT				"script/prey_main.script"	// HUMANHEAD pdm
+#define SCRIPT_DEFAULTFUNC			"prey_main"					// HUMANHEAD pdm
 
 typedef struct {
 	char		sessionCommand[MAX_STRING_CHARS];	// "map", "disconnect", "victory", etc
@@ -136,14 +136,11 @@ public:
 	// return NULL once the fullscreen UI mode should stop, or "main" to go to main menu
 	virtual const char *		HandleGuiCommands( const char *menuCommand ) = 0;
 
-	// main menu commands not caught in the engine are passed here
-	virtual void				HandleMainMenuCommands( const char *menuCommand, idUserInterface *gui ) = 0;
-
 	// Early check to deny connect.
 	virtual allowReply_t		ServerAllowClient( int numClients, const char *IP, const char *guid, const char *password, char reason[MAX_STRING_CHARS] ) = 0;
 
 	// Connects a client.
-	virtual void				ServerClientConnect( int clientNum, const char *guid ) = 0;
+	virtual void				ServerClientConnect( int clientNum ) = 0;
 
 	// Spawns the player entity to be used by the client.
 	virtual void				ServerClientBegin( int clientNum ) = 0;
@@ -173,13 +170,16 @@ public:
 	virtual void				ClientProcessReliableMessage( int clientNum, const idBitMsg &msg ) = 0;
 
 	// Runs prediction on entities at the client.
-	virtual gameReturn_t		ClientPrediction( int clientNum, const usercmd_t *clientCmds, bool lastPredictFrame ) = 0;
+	virtual gameReturn_t		ClientPrediction( int clientNum, const usercmd_t *clientCmds ) = 0;
 
 	// Used to manage divergent time-lines
 	virtual void				SelectTimeGroup( int timeGroup ) = 0;
 	virtual int					GetTimeGroupTime( int timeGroup ) = 0;
 
-	virtual void				GetBestGameType( const char* map, const char* gametype, char buf[ MAX_STRING_CHARS ] ) = 0;
+	virtual idStr				GetBestGameType( const char* map, const char* gametype ) = 0;
+
+	// HUMANHEAD pdm: print game side memory statistics
+	virtual void				PrintMemInfo( MemInfo_t *mi ) = 0;
 
 	// Returns a summary of stats for a given client
 	virtual void				GetClientStats( int clientNum, char *data, const int len ) = 0;
@@ -189,7 +189,10 @@ public:
 
 	virtual bool				DownloadRequest( const char *IP, const char *guid, const char *paks, char urls[ MAX_STRING_CHARS ] ) = 0;
 
-	virtual void				GetMapLoadingGUI( char gui[ MAX_STRING_CHARS ] ) = 0;
+	// HUMANHEAD mdl:  Check if we're deathwalking for game saves
+	virtual bool				PlayerIsDeathwalking( void ) = 0;
+	virtual unsigned int		GetTimePlayed( void ) = 0;
+	virtual void				ClearTimePlayed( void ) = 0;
 };
 
 extern idGame *					game;
@@ -250,6 +253,10 @@ public:
 	virtual int					ANIM_GetNumFrames( const idMD5Anim *anim );
 	virtual void				ANIM_CreateAnimFrame( const idRenderModel *model, const idMD5Anim *anim, int numJoints, idJointMat *frame, int time, const idVec3 &offset, bool remove_origin_offset );
 	virtual idRenderModel *		ANIM_CreateMeshForAnim( idRenderModel *model, const char *classname, const char *animname, int frame, bool remove_origin_offset );
+
+	// HUMANHEAD pdm
+	virtual const idMD5Anim *	ANIM_GetAnimFromArgs( const idDict *args, const char *animname );
+	// HUMANHEAD END
 
 	// Articulated Figure calls for AF editor and Radiant.
 	virtual bool				AF_SpawnEntity( const char *fileName );
@@ -318,7 +325,7 @@ extern idGameEdit *				gameEdit;
 ===============================================================================
 */
 
-const int GAME_API_VERSION		= 8;
+const int GAME_API_VERSION		= 7;
 
 typedef struct {
 
@@ -336,6 +343,12 @@ typedef struct {
 	idDeclManager *				declManager;			// declaration manager
 	idAASFileManager *			AASFileManager;			// AAS file manager
 	idCollisionModelManager *	collisionModelManager;	// collision model manager
+
+	// HUMANHEAD pdm
+#if INGAME_PROFILER_ENABLED
+	hhProfiler *				profiler;				// in-game profiler
+#endif	
+	// HUMANHEAD END
 
 } gameImport_t;
 

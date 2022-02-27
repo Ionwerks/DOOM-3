@@ -269,16 +269,16 @@ static infoParm_t	infoParms[] = {
 	{"cardboard",	0,	SURFTYPE_CARDBOARD,	0 },	// cardboard
 	{"liquid",		0,	SURFTYPE_LIQUID,	0 },	// liquid
 	{"glass",		0,	SURFTYPE_GLASS,		0 },	// glass
-	{"plastic",		0,	SURFTYPE_PLASTIC,	0 },	// plastic
-	{"ricochet",	0,	SURFTYPE_RICOCHET,	0 },	// behaves like metal but causes a ricochet sound
+	{"wallwalk",	0,	SURFTYPE_WALLWALK,	0 },	// plastic
+	{"matter_altmetal",	0,	SURFTYPE_ALTMETAL,	0 },	// behaves like metal but causes a ricochet sound
 
 	// unassigned surface types
-	{"surftype10",	0,	SURFTYPE_10,	0 },
-	{"surftype11",	0,	SURFTYPE_11,	0 },
-	{"surftype12",	0,	SURFTYPE_12,	0 },
-	{"surftype13",	0,	SURFTYPE_13,	0 },
-	{"surftype14",	0,	SURFTYPE_14,	0 },
-	{"surftype15",	0,	SURFTYPE_15,	0 },
+	{"forcefield",	0,	SURFTYPE_FORCEFIELD,	0 },
+	{"pipe",	0,	SURFTYPE_PIPE,	0 },
+	{"spirit",	0,	SURFTYPE_SPIRIT,	0 },
+	//{"surftype13",	0,	SURFTYPE_13,	0 },
+	//{"surftype14",	0,	SURFTYPE_14,	0 },
+	//{"surftype15",	0,	SURFTYPE_15,	0 },
 };
 
 static const int numInfoParms = sizeof(infoParms) / sizeof (infoParms[0]);
@@ -1530,11 +1530,27 @@ void idMaterial::ParseStage( idLexer &src, const textureRepeat_t trpDefault ) {
 			ParseFragmentMap( src, &newStage );
 			continue;
 		}
+// jmarshall
+		if (!token.Icmp("glowStage")) {
+			idStr tmp;
+			src.ParseRestOfLine(tmp);
+			continue;
+		}
+		if (!token.Icmp("specularEXP")) {
+			idStr tmp;
+			src.ParseRestOfLine(tmp);
+			continue;
+		}
+// jmarshall end
 
-
+// jmarshall
 		common->Warning( "unknown token '%s' in material '%s'", token.c_str(), GetName() );
-		SetMaterialFlag( MF_DEFAULTED );
-		return;
+		idStr tmp;
+		src.ParseRestOfLine(tmp);
+// jmarshall end
+		//SetMaterialFlag( MF_DEFAULTED );
+		//return;
+		continue;
 	}
 
 
@@ -2058,9 +2074,12 @@ void idMaterial::ParseMaterial( idLexer &src ) {
 			continue;
 		}
 		else {
+// jmarshall 
 			common->Warning( "unknown general material parameter '%s' in '%s'", token.c_str(), GetName() );
-			SetMaterialFlag( MF_DEFAULTED );
-			return;
+			//SetMaterialFlag( MF_DEFAULTED );
+			//return;
+			continue;
+// jmarshall end
 		}
 	}
 

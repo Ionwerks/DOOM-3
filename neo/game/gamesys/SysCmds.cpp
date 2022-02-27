@@ -45,24 +45,12 @@ float Cmd_GetFloatArg( const idCmdArgs &args, int &argNum ) {
 	return atof( value );
 }
 
-/*
-===================
-Cmd_EntityList_f
-===================
-*/
-void Cmd_EntityList_f( const idCmdArgs &args ) {
+//HUMANHEAD rww - make generally available so we can use it to spew an entlist on too many ents
+void Cmd_EntityList(const idStr &match) {
 	int			e;
 	idEntity	*check;
 	int			count;
 	size_t		size;
-	idStr		match;
-
-	if ( args.Argc() > 1 ) {
-		match = args.Args();
-		match.Replace( " ", "" );
-	} else {
-		match = "";
-	}
 
 	count = 0;
 	size = 0;
@@ -88,6 +76,25 @@ void Cmd_EntityList_f( const idCmdArgs &args ) {
 	}
 
 	gameLocal.Printf( "...%d entities\n...%d bytes of spawnargs\n", count, size );
+}
+//HUMANHEAD END
+
+/*
+===================
+Cmd_EntityList_f
+===================
+*/
+void Cmd_EntityList_f( const idCmdArgs &args ) {
+	idStr		match;
+
+	if ( args.Argc() > 1 ) {
+		match = args.Args();
+		match.Replace( " ", "" );
+	} else {
+		match = "";
+	}
+
+	Cmd_EntityList(match);
 }
 
 /*
@@ -129,7 +136,7 @@ void Cmd_ListSpawnArgs_f( const idCmdArgs &args ) {
 
 	for ( i = 0; i < ent->spawnArgs.GetNumKeyVals(); i++ ) {
 		const idKeyValue *kv = ent->spawnArgs.GetKeyVal( i );
-		gameLocal.Printf( "\"%s\"  "S_COLOR_WHITE"\"%s\"\n", kv->GetKey().c_str(), kv->GetValue().c_str() );
+		gameLocal.Printf( "\"%s\"  " S_COLOR_WHITE "\"%s\"\n", kv->GetKey().c_str(), kv->GetValue().c_str() );
 	}
 }
 
@@ -230,7 +237,51 @@ Kills all the monsters in a level.
 ==================
 */
 void Cmd_KillMonsters_f( const idCmdArgs &args ) {
-	KillEntities( args, idAI::Type );
+	//HUMANHEAD jsh dont kill monsters with "no_kill_monsters" set
+	//KillEntities( args, idAI::Type );
+	idEntity	*ent;
+	idStrList	ignore;
+	const char *name;
+	int			i;
+
+// HUMANHEAD bg: Kill only active monsters, using Damage() so they trigger their targets.
+	if ( idStr::Icmp( args.Argv(1), "active" ) == 0 ) {
+		hhPlayer *player = static_cast<hhPlayer*>( gameLocal.GetLocalPlayer() );
+		if( !player || !gameLocal.CheatsOk() ) {
+			return;
+		}
+		for( ent = gameLocal.spawnedEntities.Next(); ent != NULL; ent = ent->spawnNode.Next() ) {
+			if( ent->IsType( idAI::Type ) && !ent->fl.isDormant ) {
+				ent->Damage( player, player, vec3_zero, "damage_instantdeath", 9999.0f, 0 );
+			}
+		}
+		KillEntities( args, idProjectile::Type );
+		return;
+	}
+// HUMANHEAD END
+
+	if ( !gameLocal.GetLocalPlayer() || !gameLocal.CheatsOk( false ) ) {
+		return;
+	}
+
+	for( i = 1; i < args.Argc(); i++ ) {
+		name = args.Argv( i );
+		ignore.Append( name );
+	}
+
+	for( ent = gameLocal.spawnedEntities.Next(); ent != NULL; ent = ent->spawnNode.Next() ) {
+		if ( ent->IsType( idAI::Type ) && !ent->spawnArgs.GetBool( "no_kill_monsters", "0" ) ) {
+			for( i = 0; i < ignore.Num(); i++ ) {
+				if ( ignore[ i ] == ent->name ) {
+					break;
+				}
+			}
+			if ( i >= ignore.Num() ) {
+				ent->PostEventMS( &EV_Remove, 0 );
+			}
+		}
+	}
+	//END HUMANHEAD
 
 	// kill any projectiles as well since they have pointers to the monster that created them
 	KillEntities( args, idProjectile::Type );
@@ -283,6 +334,11 @@ void Cmd_Give_f( const idCmdArgs &args ) {
 		return;
 	}
 
+	//HUMANHEAD PCF rww 05/16/06
+	bool wasInside = declManager->GetInsideLevelLoad();
+	declManager->SetInsideLevelLoad(true);
+	//HUMANHEAD END
+
 	name = args.Argv( 1 );
 
 	if ( idStr::Icmp( name, "all" ) == 0 ) {
@@ -304,12 +360,19 @@ void Cmd_Give_f( const idCmdArgs &args ) {
 
 	if ( ( idStr::Cmpn( name, "weapon_", 7 ) == 0 ) || ( idStr::Cmpn( name, "item_", 5 ) == 0 ) || ( idStr::Cmpn( name, "ammo_", 5 ) == 0 ) ) {
 		player->GiveItem( name );
+		//HUMANHEAD PCF rww 05/16/06
+		declManager->SetInsideLevelLoad(wasInside);
+		//HUMANHEAD END
 		return;
 	}
 
-	if ( give_all || idStr::Icmp( name, "health" ) == 0 )	{
+	if ( give_all || idStr::Icmp( name, "health" ) == 0 ) {
 		player->health = player->inventory.maxHealth;
+		player->healthPulse = true;	// HUMANHEAD pdm
 		if ( !give_all ) {
+			//HUMANHEAD PCF rww 05/16/06
+			declManager->SetInsideLevelLoad(wasInside);
+			//HUMANHEAD END
 			return;
 		}
 	}
@@ -319,19 +382,46 @@ void Cmd_Give_f( const idCmdArgs &args ) {
 		player->CacheWeapons();
 
 		if ( !give_all ) {
+			//HUMANHEAD PCF rww 05/16/06
+			declManager->SetInsideLevelLoad(wasInside);
+			//HUMANHEAD END
+			return;
+		}
+
+		static_cast<hhPlayer *>(player)->UnlockWeapon( -1 );	// HUMANHEAD mdl:  Unlock all weapons for give all
+	}
+
+#ifdef HUMANHEAD	// HUMANHEAD pdm
+	if ( give_all || idStr::Icmp( name, "items" ) == 0 ) {
+		player->GiveItem( "item_lighter" );
+		player->GiveItem( "item_talon" );
+		player->GiveItem( "item_spiritwalk" );
+		player->GiveItem( "item_wallwalkboots" );
+		player->GiveItem( "item_hand1" );
+		if ( !give_all ) {
+			//HUMANHEAD PCF rww 05/16/06
+			declManager->SetInsideLevelLoad(wasInside);
+			//HUMANHEAD END
 			return;
 		}
 	}
+#endif
 
 	if ( give_all || idStr::Icmp( name, "ammo" ) == 0 ) {
+		player->spiritPulse = true;
 		for ( i = 0 ; i < AMMO_NUMTYPES; i++ ) {
 			player->inventory.ammo[ i ] = player->inventory.MaxAmmoForAmmoClass( player, idWeapon::GetAmmoNameForNum( ( ammo_t )i ) );
 		}
 		if ( !give_all ) {
+			//HUMANHEAD PCF rww 05/16/06
+			declManager->SetInsideLevelLoad(wasInside);
+			//HUMANHEAD END
 			return;
 		}
 	}
 
+#ifndef HUMANHEAD	// HUMANHEAD pdm: not used
+/*
 	if ( give_all || idStr::Icmp( name, "armor" ) == 0 ) {
 		player->inventory.armor = player->inventory.maxarmor;
 		if ( !give_all ) {
@@ -358,10 +448,16 @@ void Cmd_Give_f( const idCmdArgs &args ) {
 		player->GiveVideo( args.Argv(2), NULL );
 		return;
 	}
+*/
+#endif
 
 	if ( !give_all && !player->Give( args.Argv(1), args.Argv(2) ) ) {
 		gameLocal.Printf( "unknown item\n" );
 	}
+
+	//HUMANHEAD PCF rww 05/16/06
+	declManager->SetInsideLevelLoad(wasInside);
+	//HUMANHEAD END
 }
 
 /*
@@ -537,7 +633,11 @@ Cmd_Say
 ==================
 */
 static void Cmd_Say( bool team, const idCmdArgs &args ) {
+#if HUMANHEAD	// HUMANHEAD pdm
+	idStr name;
+#else
 	const char *name;
+#endif
 	idStr text;
 	const char *cmd = team ? "sayTeam" : "say" ;
 
@@ -569,7 +669,13 @@ static void Cmd_Say( bool team, const idCmdArgs &args ) {
 		player = gameLocal.localClientNum >= 0 ? static_cast<idPlayer *>( gameLocal.entities[ gameLocal.localClientNum ] ) : NULL;
 		if ( player ) {
 			name = player->GetUserInfo()->GetString( "ui_name", "player" );
+#if HUMANHEAD	// HUMANHEAD pdm
+			// Doctor up name and text with appropriate colors
+			name.Insert(S_COLOR_YELLOW, 0);
+			text.Insert(S_COLOR_YELLOW, 0);
+#endif
 		}
+
 	} else {
 		name = "server";
 	}
@@ -602,7 +708,13 @@ Cmd_SayTeam_f
 ==================
 */
 static void Cmd_SayTeam_f( const idCmdArgs &args ) {
-	Cmd_Say( true, args );
+	//HUMANHEAD rww - never use teamchat in dm
+	bool teamSay = true;
+	if (gameLocal.gameType != GAME_TDM) {
+		teamSay = false;
+	}
+	//HUMANHEAD END
+	Cmd_Say( teamSay, args );
 }
 
 /*
@@ -794,7 +906,7 @@ void Cmd_Spawn_f( const idCmdArgs &args ) {
 	dict.Set( "classname", value );
 	dict.Set( "angle", va( "%f", yaw + 180 ) );
 
-	org = player->GetPhysics()->GetOrigin() + idAngles( 0, yaw, 0 ).ToForward() * 80 + idVec3( 0, 0, 1 );
+	org = player->GetPhysics()->GetOrigin() + idAngles( 0, yaw, 0 ).ToForward() * 180 + idVec3( 0, 0, 1 );
 	dict.Set( "origin", org.ToString() );
 
 	for( i = 2; i < args.Argc() - 1; i += 2 ) {
@@ -805,8 +917,68 @@ void Cmd_Spawn_f( const idCmdArgs &args ) {
 		dict.Set( key, value );
 	}
 
+	//HUMANHEAD PCF rww 05/16/06
+	bool wasInside = declManager->GetInsideLevelLoad();
+	declManager->SetInsideLevelLoad(true);
+	//HUMANHEAD END
+
 	gameLocal.SpawnEntityDef( dict );
+
+	//HUMANHEAD PCF rww 05/16/06
+	declManager->SetInsideLevelLoad(wasInside);
+	//HUMANHEAD END
 }
+
+//HUMANHEAD rww
+/*
+===================
+Cmd_SpawnArtificialPlayer_f
+===================
+*/
+void Cmd_SpawnArtificialPlayer_f(const idCmdArgs &args) {
+	if (!gameLocal.isMultiplayer || !gameLocal.isServer) {
+		gameLocal.Printf("Artificial players must be spawned in multiplayer as the server.\n");
+		return;
+	}
+
+	if ( !gameLocal.CheatsOk( false ) ) {
+		return;
+	}
+
+	gameLocal.SpawnArtificialPlayer();
+}
+
+/*
+===================
+Cmd_PlayerShadowToggle_f
+===================
+*/
+#if !GOLD
+void Cmd_PlayerShadowToggle_f(const idCmdArgs &args) {
+	bool setShadows;
+
+	if ( !gameLocal.CheatsOk( false ) ) {
+		return;
+	}
+	if (!gameLocal.entities[0] || !gameLocal.entities[0]->IsType(hhPlayer::Type)) {
+		return;
+	}
+
+	//set everyone to opposite of whatever first client is
+	setShadows = !gameLocal.entities[0]->GetRenderEntity()->noShadow;
+
+	const int	maxClients = gameLocal.serverInfo.GetInt( "si_maxPlayers" );
+	for (int i = 0; i < maxClients; i++) {
+		if (!gameLocal.entities[i]) {
+			break;
+		}
+		if (gameLocal.entities[i]->IsType(hhPlayer::Type)) {
+			gameLocal.entities[i]->GetRenderEntity()->noShadow = setShadows;
+		}
+	}
+}
+#endif
+//HUMANHEAD END
 
 /*
 ==================
@@ -990,6 +1162,12 @@ void Cmd_PopLight_f( const idCmdArgs &args ) {
 			continue;
 		}
 
+		// HUMANHEAD pdm: don't allow popping of our generated lights (like headlights)
+		if (ent->IsBound()) {
+			continue;
+		}
+		// HUMANHEAD END
+
 		if ( gameLocal.spawnIds[ ent->entityNumber ] > last ) {
 			last = gameLocal.spawnIds[ ent->entityNumber ];
 			lastLight = static_cast<idLight*>( ent );
@@ -1038,6 +1216,11 @@ void Cmd_ClearLights_f( const idCmdArgs &args ) {
 		if ( removeFromMap && mapEnt ) {
 			mapFile->RemoveEntity( mapEnt );
 		}
+		// HUMANHEAD pdm: don't allow popping of our generated lights (like headlights)
+		else if (ent->IsBound()) {
+			continue;
+		}
+		// HUMANHEAD END
 
 		delete light;
 	}
@@ -1076,7 +1259,8 @@ void Cmd_TestFx_f( const idCmdArgs &args ) {
 	dict.Set( "origin", offset.ToString() );
 	dict.Set( "test", "1");
 	dict.Set( "fx", name );
-	gameLocal.testFx = ( idEntityFx * )gameLocal.SpawnEntityType( idEntityFx::Type, &dict );
+	//HUMANHEAD rww - hhEntityFx
+	gameLocal.testFx = ( hhEntityFx * )gameLocal.SpawnEntityType( hhEntityFx::Type, &dict );
 }
 
 #define MAX_DEBUGLINES	128
@@ -1133,6 +1317,91 @@ static void Cmd_AddDebugLine_f( const idCmdArgs &args ) {
 	debugLines[i].end.y = Cmd_GetFloatArg( args, argNum );
 	debugLines[i].end.z = Cmd_GetFloatArg( args, argNum );
 	debugLines[i].color = Cmd_GetFloatArg( args, argNum );
+}
+
+/*
+HUMANHEAD rww
+==================
+Debug_ClearDebugLines
+==================
+*/
+void Debug_ClearDebugLines(void)
+{
+	for (int i = 0; i < MAX_DEBUGLINES; i++)
+	{
+		debugLines[i].used = false;
+	}
+}
+
+/*
+HUMANHEAD rww
+==================
+Debug_AddDebugLinesForTri
+==================
+*/
+void Debug_AddDebugLinesForTri(srfTriangles_t *tri)
+{
+	int i;
+	int j = 0;
+	for (i = 0; i < MAX_DEBUGLINES; i++)
+	{
+		if (!debugLines[i].used)
+		{
+			break;
+		}
+	}
+	while (i < MAX_DEBUGLINES && j < tri->numVerts)
+	{
+		if (debugLines[i].used)
+		{
+			i++;
+			continue;
+		}
+		debugLines[i].used = true;
+		debugLines[i].blink = false;
+		debugLines[i].start.x = 0;
+		debugLines[i].start.y = 0;
+		debugLines[i].start.z = 0;
+		debugLines[i].end.x = tri->verts[j].xyz[0];
+		debugLines[i].end.y = tri->verts[j].xyz[1];
+		debugLines[i].end.z = tri->verts[j].xyz[2];
+		debugLines[i].color = 1;
+
+		j++;
+		i++;
+	}
+}
+
+/*
+HUMANHEAD rww
+==================
+Debug_AddDebugLine
+==================
+*/
+void Debug_AddDebugLine(idVec3 &start, idVec3 &end, int color)
+{
+	int i;
+	for (i = 0; i < MAX_DEBUGLINES; i++)
+	{
+		if (!debugLines[i].used)
+		{
+			break;
+		}
+	}
+	if (i == MAX_DEBUGLINES)
+	{ //we're full
+		return;
+	}
+
+	debugLines[i].used = true;
+	debugLines[i].blink = false;
+	debugLines[i].start.x = start[0];
+	debugLines[i].start.y = start[1];
+	debugLines[i].start.z = start[2];
+	debugLines[i].end.x = end[0];
+	debugLines[i].end.y = end[1];
+	debugLines[i].end.z = end[2];
+	debugLines[i].color = color;
 }
 
 /*
@@ -1564,7 +1833,8 @@ static void Cmd_WeaponSplat_f( const idCmdArgs &args ) {
 		return;
 	}
 
-	player->weapon.GetEntity()->BloodSplat( 2.0f );
+	//HUMANHEAD: aob - we don't have BloodSplat anymore
+	//player->weapon.GetEntity()->BloodSplat( 2.0f );
 }
 
 /*
@@ -1705,6 +1975,12 @@ static void Cmd_SaveMoveables_f( const idCmdArgs &args ) {
 			continue;
 		}
 
+#if HUMANHEAD	// HUMANHEAD pdm: skip all deathwalk entities
+		if ( !idStr::Icmpn(m->name, "dw_", 3) ) {
+			continue;
+		}
+#endif
+
 		if ( m->IsBound() ) {
 			continue;
 		}
@@ -1770,6 +2046,12 @@ static void Cmd_SaveRagdolls_f( const idCmdArgs &args ) {
 		if ( !af->IsType( idAFEntity_WithAttachedHead::Type ) && !af->IsType( idAFEntity_Generic::Type ) ) {
 			continue;
 		}
+
+#if HUMANHEAD	// HUMANHEAD pdm: skip all deathwalk entities
+		if ( !idStr::Icmpn(af->name, "dw_", 3) ) {
+			continue;
+		}
+#endif
 
 		if ( af->IsBound() ) {
 			continue;
@@ -1884,6 +2166,12 @@ static void Cmd_SaveLights_f( const idCmdArgs &args ) {
 			continue;
 		}
 
+#if HUMANHEAD	// HUMANHEAD pdm: skip all deathwalk entities
+		if ( !idStr::Icmpn(light->name, "dw_", 3) ) {
+			continue;
+		}
+#endif
+
 		dict.Clear();
 		light->SaveState( &dict );
 
@@ -1944,6 +2232,12 @@ static void Cmd_SaveParticles_f( const idCmdArgs &args ) {
 		if ( !ent ) {
 			continue;
 		}
+
+#if HUMANHEAD	// HUMANHEAD pdm: skip all deathwalk entities
+		if ( !idStr::Icmpn(ent->name, "dw_", 3) ) {
+			continue;
+		}
+#endif
 
 		strModel = ent->spawnArgs.GetString( "model" );
 		if ( strModel.Length() && strModel.Find( ".prt") > 0 ) {
@@ -2014,23 +2308,26 @@ static void Cmd_RecordViewNotes_f( const idCmdArgs &args ) {
 	// Argv(2) = note number (person0001)
 	// Argv(3) = comments
 
-	idStr str = args.Argv(1);
-	str.SetFileExtension( ".txt" );
-	idFile *file = fileSystem->OpenFileAppend( str );
-	if ( file ) {
-		file->WriteFloatString( "\"view\"\t( %s )\t( %s )\r\n", origin.ToString(), axis.ToString() );
-		file->WriteFloatString( "\"comments\"\t\"%s: %s\"\r\n\r\n", args.Argv(2), args.Argv(3) );
-		fileSystem->CloseFile( file );
-	}
-
-	idStr viewComments = args.Argv(1);
-	viewComments.StripLeading("viewnotes/");
-	viewComments += " -- Loc: ";
-	viewComments += origin.ToString();
-	viewComments += "\n";
-	viewComments += args.Argv(3);
-	player->hud->SetStateString( "viewcomments", viewComments );
-	player->hud->HandleNamedEvent( "showViewComments" );
+	// HUMANHEAD pdm: prepended p:/base/
+	//idStr str = "p:/base/";
+	//str += args.Argv(1);
+	//str.SetFileExtension( ".txt" );
+	//// HUMANHEAD pdm: made explicit so we can write to P drive
+	//idFile *file = fileSystem->OpenExplicitFileAppend( str );
+	//if ( file ) {
+	//	file->WriteFloatString( "\"view\"\t( %s )\t( %s )\r\n", origin.ToString(), axis.ToString() );
+	//	file->WriteFloatString( "\"comments\"\t\"%s: %s\"\r\n\r\n", args.Argv(2), args.Argv(3) );
+	//	fileSystem->CloseFile( file );
+	//}
+	//
+	//idStr viewComments = args.Argv(1);
+	//viewComments.StripLeading("viewnotes/");
+	//viewComments += " -- Loc: ";
+	//viewComments += origin.ToString();
+	//viewComments += "\n";
+	//viewComments += args.Argv(3);
+	//player->hud->SetStateString( "viewcomments", viewComments );
+	//player->hud->HandleNamedEvent( "showViewComments" );
 }
 
 /*
@@ -2068,17 +2365,17 @@ static void Cmd_ShowViewNotes_f( const idCmdArgs &args ) {
 	}
 
 	if ( !parser.IsLoaded() ) {
-		idStr str = "viewnotes/";
+		idStr str = "p:\\base\\viewnotes\\";	// HUMANHEAD pdm: added p:\base and changed to backslashes
 		str += gameLocal.GetMapName();
 		str.StripFileExtension();
-		str += "/";
+		str += "\\";	// HUMANHEAD pdm: changed to backslashes
 		if ( args.Argc() > 1 ) {
 			str += args.Argv( 1 );
 		} else {
 			str += "comments";
 		}
 		str.SetFileExtension( ".txt" );
-		if ( !parser.LoadFile( str ) ) {
+		if ( !parser.LoadFile( str, true ) ) {	// HUMANHEAD pdm: added 'true' to treat as OS path
 			gameLocal.Printf( "No view notes for %s\n", gameLocal.GetMapName() );
 			return;
 		}
@@ -2092,9 +2389,93 @@ static void Cmd_ShowViewNotes_f( const idCmdArgs &args ) {
 	} else {
 		parser.FreeSource();
 		player->hud->HandleNamedEvent( "hideViewComments" );
+		player->hud->SetStateString( "viewcomments", "" ); // HUMANHEAD mdl:  So we don't erase when nothing is displayed
 		return;
 	}
 }
+
+// HUMANHEAD mdl:  Added EraseViewNote
+/*
+==================
+Cmd_EraseViewNote_f
+==================
+*/
+static void Cmd_EraseViewNote_f( const idCmdArgs &args ) {
+	idLexer parser( LEXFL_ALLOWPATHNAMES | LEXFL_NOSTRINGESCAPECHARS | LEXFL_NOSTRINGCONCAT | LEXFL_NOFATALERRORS );
+	idToken	token;
+	idPlayer *player;
+	idVec3 origin;
+	idMat3 axis;
+
+	player = gameLocal.GetLocalPlayer();
+
+	if ( !player ) {
+		return;
+	}
+
+	const char *comment = player->hud->State().GetString( "viewcomments" );
+	if ( !comment ) {
+		gameLocal.Warning( "No currently displayed comment.\n" );
+		return;
+	}
+
+	idStr str = "p:\\base\\viewnotes\\";	// HUMANHEAD pdm: added p:\base and changed to backslashes
+	str += gameLocal.GetMapName();
+	str.StripFileExtension();
+	str += "\\";	// HUMANHEAD pdm: changed to backslashes
+	if ( args.Argc() > 1 ) {
+		str += args.Argv( 1 );
+	} else {
+		str += "comments";
+	}
+	str.SetFileExtension( ".txt" );
+	if ( !parser.LoadFile( str, true ) ) {	// HUMANHEAD pdm: added 'true' to treat as OS path
+		gameLocal.Printf( "No view notes for %s\n", gameLocal.GetMapName() );
+		return;
+	}
+
+	idFile *file = fileSystem->OpenExplicitFileWrite( str );
+	if ( !file ) {
+		gameLocal.Warning( "Failed to open view notes file for writing.\n" );
+		return;
+	}
+
+	bool found = false;
+	while ( parser.ExpectTokenString( "view" ) && parser.Parse1DMatrix( 3, origin.ToFloatPtr() ) && 
+		parser.Parse1DMatrix( 9, axis.ToFloatPtr() ) && parser.ExpectTokenString( "comments" ) && parser.ReadToken( &token ) ) {
+
+		if ( idStr::Cmp( comment, token ) == 0 ) {
+			if ( found ) {
+				gameLocal.Warning( "Found note more than once...\n" );
+			}
+			found = true;
+			continue;
+		}
+
+		file->WriteFloatString( "\"view\"\t( %s )\t( %s )\r\n", origin.ToString(), axis.ToString() );
+		file->WriteFloatString( "\"comments\"\t\"%s\"\r\n\r\n", (const char *) token );
+	}
+
+	if ( found ) {
+		gameLocal.Printf( "Removed note.\n" );
+	} else {
+		gameLocal.Printf( "Couldn't find note.\n" );
+	}
+
+#if !GOLD
+	bool removeFile = (file->Length() == 0);
+#endif
+
+	fileSystem->CloseFile( file );
+	player->hud->HandleNamedEvent( "hideViewComments" );
+
+#if !GOLD
+	if ( removeFile ) {
+		remove( str );
+	}
+#endif
+}
+// HUMANHEAD END
 
 /*
 =================
@@ -2196,15 +2577,16 @@ void Cmd_NextGUI_f( const idCmdArgs &args ) {
 		}
 
 		for ( ; ent != NULL; ent = ent->spawnNode.Next() ) {
-			if ( ent->spawnArgs.GetString( "gui", NULL ) != NULL ) {
+			// HUMANHEAD pdm: added exclusions for animated entities since they can't be teleported to
+			if ( !ent->IsType(hhAnimatedEntity::Type) && ent->spawnArgs.GetString( "gui", NULL ) != NULL ) {
 				break;
 			}
 			
-			if ( ent->spawnArgs.GetString( "gui2", NULL ) != NULL ) {
+			if ( !ent->IsType(hhAnimatedEntity::Type) && ent->spawnArgs.GetString( "gui2", NULL ) != NULL ) {
 				break;
 			}
 
-			if ( ent->spawnArgs.GetString( "gui3", NULL ) != NULL ) {
+			if ( !ent->IsType(hhAnimatedEntity::Type) && ent->spawnArgs.GetString( "gui3", NULL ) != NULL ) {
 				break;
 			}
 			
@@ -2283,6 +2665,68 @@ void Cmd_TestId_f( const idCmdArgs &args ) {
 	gameLocal.mpGame.AddChatLine( common->GetLanguageDict()->GetString( id ), "<nothing>", "<nothing>", "<nothing>" );	
 }
 
+//HUMANHEAD rww
+#if !GOLD
+void Cmd_CharSet_f( const idCmdArgs &args ) {
+	int ix,jx;
+
+	common->Printf("   ");
+	for (ix=0; ix<16; ix++) {
+		common->Printf("%x", ix);
+	}
+	common->Printf("\n");
+
+	for (ix=0; ix<16; ix++) {
+		common->Printf("%x ", ix);
+		for (jx=0; jx<16; jx++) {
+			if (ix==0 && (jx==0 || jx==9 || jx==10 || jx==13)) {
+				common->Printf(" ");
+			}
+			else {
+				common->Printf("%c", (char)(ix*16+jx));
+			}
+		}
+		common->Printf("\n");
+	}
+}
+
+/*
+===============
+Cmd_PrintTypeName_f
+===============
+*/
+void Cmd_PrintTypeName_f( const idCmdArgs &args ) {
+	if ( args.Argc() == 1 ) {
+		common->Printf( "usage: printTypeName <type num>\n" );
+		return;
+	}
+
+	int typeNum = atoi(args.Argv(1));
+	idTypeInfo *type = idClass::GetType(typeNum);
+	if (type) {
+		common->Printf("Type '%i' is '%s'\n", typeNum, type->classname);
+	}
+	else {
+		common->Printf("Invalid typenum.\n");
+	}
+}
+#endif
+/*
+===============
+Cmd_PlayTime_f
+HUMANHEAD mdl
+===============
+*/
+void Cmd_PlayTime_f( const idCmdArgs &args ) {
+	unsigned int seconds, minutes, hours, time;
+	time = MS2SEC(gameLocal.GetTimePlayed());
+	seconds = time % 60;
+	minutes = (time / 60) % 60;
+	hours = time / 3600;
+	common->Printf("%u:%.2u:%.2u\n", hours, minutes, seconds);
+}
+//HUMANHEAD END
+
 /*
 =================
 idGameLocal::InitConsoleCommands
@@ -2316,10 +2760,16 @@ void idGameLocal::InitConsoleCommands( void ) {
 	cmdSystem->AddCommand( "getviewpos",			Cmd_GetViewpos_f,			CMD_FL_GAME|CMD_FL_CHEAT,	"prints the current view position" );
 	cmdSystem->AddCommand( "setviewpos",			Cmd_SetViewpos_f,			CMD_FL_GAME|CMD_FL_CHEAT,	"sets the current view position" );
 	cmdSystem->AddCommand( "teleport",				Cmd_Teleport_f,				CMD_FL_GAME|CMD_FL_CHEAT,	"teleports the player to an entity location", idGameLocal::ArgCompletion_EntityName );
-	cmdSystem->AddCommand( "trigger",				Cmd_Trigger_f,				CMD_FL_GAME|CMD_FL_CHEAT,	"triggers an entity", idGameLocal::ArgCompletion_EntityName );
+//	cmdSystem->AddCommand( "trigger",				Cmd_Trigger_f,				CMD_FL_GAME|CMD_FL_CHEAT,	"triggers an entity", idGameLocal::ArgCompletion_EntityName );// HUMANHEAD CJRPERSISTENTMERGE:  our version of this is better
 	cmdSystem->AddCommand( "spawn",					Cmd_Spawn_f,				CMD_FL_GAME|CMD_FL_CHEAT,	"spawns a game entity", idCmdSystem::ArgCompletion_Decl<DECL_ENTITYDEF> );
+	//HUMANHEAD rww
+	cmdSystem->AddCommand( "spawnArtificialPlayer",	Cmd_SpawnArtificialPlayer_f,CMD_FL_GAME|CMD_FL_CHEAT,	"spawns an artificial player entity" );
+#if !GOLD
+	cmdSystem->AddCommand( "playerShadowToggle",	Cmd_PlayerShadowToggle_f,	CMD_FL_GAME|CMD_FL_CHEAT,	"debugging - toggles shadows on current spawned players" );
+#endif
+	//HUMANHEAD END
 	cmdSystem->AddCommand( "damage",				Cmd_Damage_f,				CMD_FL_GAME|CMD_FL_CHEAT,	"apply damage to an entity", idGameLocal::ArgCompletion_EntityName );
-	cmdSystem->AddCommand( "remove",				Cmd_Remove_f,				CMD_FL_GAME|CMD_FL_CHEAT,	"removes an entity", idGameLocal::ArgCompletion_EntityName );
+//	cmdSystem->AddCommand( "remove",				Cmd_Remove_f,				CMD_FL_GAME|CMD_FL_CHEAT,	"removes an entity", idGameLocal::ArgCompletion_EntityName );// HUMANHEAD CJRPERSISTENTMERGE:  our version of this is better
 	cmdSystem->AddCommand( "killMonsters",			Cmd_KillMonsters_f,			CMD_FL_GAME|CMD_FL_CHEAT,	"removes all monsters" );
 	cmdSystem->AddCommand( "killMoveables",			Cmd_KillMovables_f,			CMD_FL_GAME|CMD_FL_CHEAT,	"removes all moveables" );
 	cmdSystem->AddCommand( "killRagdolls",			Cmd_KillRagdolls_f,			CMD_FL_GAME|CMD_FL_CHEAT,	"removes all ragdolls" );
@@ -2374,7 +2824,10 @@ void idGameLocal::InitConsoleCommands( void ) {
 	cmdSystem->AddCommand( "showViewNotes",			Cmd_ShowViewNotes_f,		CMD_FL_GAME|CMD_FL_CHEAT,	"show any view notes for the current map, successive calls will cycle to the next note" );
 	cmdSystem->AddCommand( "closeViewNotes",		Cmd_CloseViewNotes_f,		CMD_FL_GAME|CMD_FL_CHEAT,	"close the view showing any notes for this map" );
 	cmdSystem->AddCommand( "exportmodels",			Cmd_ExportModels_f,			CMD_FL_GAME|CMD_FL_CHEAT,	"exports models", ArgCompletion_DefFile );
+	cmdSystem->AddCommand( "eraseViewNote",			Cmd_EraseViewNote_f,		CMD_FL_GAME|CMD_FL_CHEAT,	"erase the currently displayed note" ); // HUMANHEAD mdl
+#endif
 
+	//HUMANHEAD jsh PCF 5/1/06 allow multiplayer stuff for demo
 	// multiplayer client commands ( replaces old impulses stuff )
 	cmdSystem->AddCommand( "clientDropWeapon",		idMultiplayerGame::DropWeapon_f, CMD_FL_GAME,			"drop current weapon" );
 	cmdSystem->AddCommand( "clientMessageMode",		idMultiplayerGame::MessageMode_f, CMD_FL_GAME,			"ingame gui message mode" );
@@ -2388,11 +2841,19 @@ void idGameLocal::InitConsoleCommands( void ) {
 	cmdSystem->AddCommand( "serverMapRestart",		idGameLocal::MapRestart_f,	CMD_FL_GAME,				"restart the current game" );
 	cmdSystem->AddCommand( "serverForceReady",	idMultiplayerGame::ForceReady_f,CMD_FL_GAME,				"force all players ready" );
 	cmdSystem->AddCommand( "serverNextMap",			idGameLocal::NextMap_f,		CMD_FL_GAME,				"change to the next map" );
-#endif
 
 	// localization help commands
 	cmdSystem->AddCommand( "nextGUI",				Cmd_NextGUI_f,				CMD_FL_GAME|CMD_FL_CHEAT,	"teleport the player to the next func_static with a gui" );
 	cmdSystem->AddCommand( "testid",				Cmd_TestId_f,				CMD_FL_GAME|CMD_FL_CHEAT,	"output the string for the specified id." );
+
+#if !GOLD //HUMANHEAD rww
+	cmdSystem->AddCommand( "charset",				Cmd_CharSet_f,				CMD_FL_SYSTEM,				"print console character set");
+	cmdSystem->AddCommand( "testsnap",				idClass::TestSnap_f,		CMD_FL_GAME|CMD_FL_CHEAT,	"quick check to make sure entity snapshots line up" );
+	cmdSystem->AddCommand( "printTypeName",			Cmd_PrintTypeName_f,		CMD_FL_SYSTEM|CMD_FL_GAME,	"prints type name for type num" );
+#endif //HUMANHEAD END
+
+	cmdSystem->AddCommand( "playTime",			Cmd_PlayTime_f,		CMD_FL_GAME,	"prints current playtime" ); //HUMANHEAD mdl
+
 }
 
 /*

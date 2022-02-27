@@ -457,7 +457,9 @@ void * idClass::operator new( size_t s ) {
 	unsigned long *ptr = (unsigned long *)p;
 	int size = s;
 	assert( ( size & 3 ) == 0 );
-	size >>= 3;
+	// HUMANHEAD tmj: bugfix - shifting by 2 gives the number of DWORDs to fill.
+	// Shifting by 3 is incorrect as it only fills the memory half way.
+	size >>= 2;
 	for ( int i = 1; i < size; i++ ) {
 		ptr[i] = 0xcdcdcdcd;
 	}
@@ -479,7 +481,9 @@ void * idClass::operator new( size_t s, int, int, char *, int ) {
 	unsigned long *ptr = (unsigned long *)p;
 	int size = s;
 	assert( ( size & 3 ) == 0 );
-	size >>= 3;
+	// HUMANHEAD tmj: bugfix - shifting by 2 gives the number of DWORDs to fill.
+	// Shifting by 3 is incorrect as it only fills the memory half way.
+	size >>= 2;
 	for ( int i = 1; i < size; i++ ) {
 		ptr[i] = 0xcdcdcdcd;
 	}
@@ -583,6 +587,64 @@ idTypeInfo *idClass::GetType( const int typeNum ) {
 	return NULL;
 }
 
+#ifdef _HH_NET_DEBUGGING //HUMANHEAD rww
+void idClass::PrintHHNetStats_f( const idCmdArgs &args ) {
+	for( int i = 0; i < types.Num(); i++ ) {
+		idTypeInfo *type = types[ i ];
+		idLib::NetworkEntStats(type->classname, type->typeNum);
+	}
+}
+#endif //HUMANHEAD END
+
+#if !GOLD //HUMANHEAD rww
+void idClass::TestSnap_f( const idCmdArgs &args ) {
+	for( int i = 0; i < types.Num(); i++ ) {
+		byte testBuffer[16384];
+		byte testBufferDelta[16384];
+		idBitMsg base;
+		idBitMsg delta;
+		idBitMsgDelta msg;
+
+		memset(testBuffer, 0, sizeof(testBuffer));
+		base.Init(testBuffer, sizeof(testBuffer));
+		int j = 0;
+		while (j < sizeof(testBuffer)/4) { //hack
+			base.WriteBits(0, 32);
+			j++;
+		}
+		delta.Init(testBufferDelta, sizeof(testBufferDelta));
+		msg.Init(&base, (idBitMsg *)NULL, &delta);
+
+		idTypeInfo *type = types[i];
+		if (strcmp(type->classname, "hhDock") &&
+			strcmp(type->classname, "hhFireController") &&
+			strcmp(type->classname, "hhGravityZoneBase") &&
+			strcmp(type->classname, "hhProxDoorSection") &&
+			strcmp(type->classname, "hhVehicle") &&
+			strcmp(type->classname, "hhZone") &&
+			strcmp(type->classname, "idCamera") &&
+			strcmp(type->classname, "idClass") &&
+			strcmp(type->classname, "idEntity") &&
+			strcmp(type->classname, "idPhysics")) { //more hacks
+			idClass *cl = type->CreateInstance();
+			if (cl && cl->IsType(idEntity::Type) &&
+				!cl->IsType(hhWeapon::Type) && !cl->IsType(idWorldspawn::Type)) {
+				idEntity *ent = (idEntity *)cl;
+
+				ent->SetPhysics(NULL);
+				ent->GetPhysics()->SetSelf(ent);
+				ent->WriteToSnapshot(msg);
+				ent->ReadFromSnapshot(msg);
+				if (delta.GetSize() != delta.GetReadCount()) {
+					gameLocal.Error("Snapshot not aligned for '%s'!", type->classname);
+				}
+				ent->Event_Remove();
+			}
+		}
+	}
+}
+#endif //HUMANHEAD END
+
 /*
 ================
 idClass::GetClassname
@@ -645,8 +707,22 @@ bool idClass::PostEventArgs( const idEventDef *ev, int time, int numargs, ... ) 
 	// we service events on the client to avoid any bad code filling up the event pool
 	// we don't want them processed usually, unless when the map is (re)loading.
 	// we allow threads to run fine, though.
-	if ( gameLocal.isClient && ( gameLocal.GameState() != GAMESTATE_STARTUP ) && !IsType( idThread::Type ) ) {
-		return true;
+	if ( gameLocal.isClient && ( gameLocal.GameState() != GAMESTATE_STARTUP ) && !IsType( idThread::Type ) )
+	{
+		//HUMANHEAD rww - take client ents into account.
+		if (IsType(idEntity::Type))
+		{
+			idEntity *ent = static_cast<idEntity *>(this);
+			if (!ent->fl.clientEntity && !ent->fl.clientEvents)
+			{ //we add events for client entities, otherwise get out of here.
+				return true;
+			}
+		}
+		else
+		{
+			return true;
+		}
+		//END HUMANHEAD
 	}
 
 	va_start( args, numargs );
@@ -654,6 +730,11 @@ bool idClass::PostEventArgs( const idEventDef *ev, int time, int numargs, ... ) 
 	va_end( args );
 
 	event->Schedule( this, c, time );
+
+	// HUMANHEAD cjr: for showing all posted events
+	if(g_postEventsDebug.GetBool()) {
+		gameLocal.Printf("PostEvent: %s [%s]\n", ev->GetName(), this->GetClassname() );
+	}
 
 	return true;
 }
@@ -828,7 +909,7 @@ idClass::ProcessEventArgs
 bool idClass::ProcessEventArgs( const idEventDef *ev, int numargs, ... ) {
 	idTypeInfo	*c;
 	int			num;
-	int			data[ D_EVENT_MAXARGS ];
+	intptr_t	data[ D_EVENT_MAXARGS ];
 	va_list		args;
 	
 	assert( ev );
@@ -936,106 +1017,89 @@ bool idClass::ProcessEvent( const idEventDef *ev, idEventArg arg1, idEventArg ar
 idClass::ProcessEventArgPtr
 ================
 */
-bool idClass::ProcessEventArgPtr( const idEventDef *ev, int *data ) {
-	idTypeInfo	*c;
+bool idClass::ProcessEventArgPtr( const idEventDef *ev, intptr_t*data ) {
+	idTypeInfo* c;
 	int			num;
 	eventCallback_t	callback;
-
-	assert( ev );
-	assert( idEvent::initialized );
-
-	if ( g_debugTriggers.GetBool() && ( ev == &EV_Activate ) && IsType( idEntity::Type ) ) {
-		const idEntity *ent = *reinterpret_cast<idEntity **>( data );
-		gameLocal.Printf( "%d: '%s' activated by '%s'\n", gameLocal.framenum, static_cast<idEntity *>( this )->GetName(), ent ? ent->GetName() : "NULL" );
+	assert(ev);
+	assert(idEvent::initialized);
+	if (g_debugTriggers.GetBool() && (ev == &EV_Activate) && IsType(idEntity::Type)) {
+		const idEntity* ent = *reinterpret_cast<idEntity**>(data);
+		gameLocal.Printf("%d: '%s' activated by '%s'\n", gameLocal.framenum, static_cast<idEntity*>(this)->GetName(), ent ? ent->GetName() : "NULL");
 	}
-
 	c = GetType();
 	num = ev->GetEventNum();
-	if ( !c->eventMap[ num ] ) {
+	if (!c->eventMap[num]) {
 		// we don't respond to this event, so ignore it
 		return false;
 	}
-
-	callback = c->eventMap[ num ];
-
-#if !CPU_EASYARGS
-
-/*
-on ppc architecture, floats are passed in a seperate set of registers
-the function prototypes must have matching float declaration
-
-http://developer.apple.com/documentation/DeveloperTools/Conceptual/MachORuntime/2rt_powerpc_abi/chapter_9_section_5.html
-*/
-
-	switch( ev->GetFormatspecIndex() ) {
-	case 1 << D_EVENT_MAXARGS :
-		( this->*callback )();
+	callback = c->eventMap[num];
+	// RB: I tried first to get CPU_EASYARGS switch running with x86_64
+	// but it caused many crashes with the Doom scripts.
+	// The new Callbacks.cpp was generated with intptr_t and it works fine.
+#if CPU_EASYARGS
+	/*
+	on ppc architecture, floats are passed in a separate set of registers
+	the function prototypes must have matching float declaration
+	http://developer.apple.com/documentation/DeveloperTools/Conceptual/MachORuntime/2rt_powerpc_abi/chapter_9_section_5.html
+	*/
+	switch (ev->GetFormatspecIndex())
+	{
+	case 1 << D_EVENT_MAXARGS:
+		(this->*callback)();
 		break;
-
-// generated file - see CREATE_EVENT_CODE
+		// generated file - see CREATE_EVENT_CODE
 #include "Callbacks.cpp"
-
 	default:
-		gameLocal.Warning( "Invalid formatspec on event '%s'", ev->GetName() );
+		gameLocal.Warning("Invalid formatspec on event '%s'", ev->GetName());
 		break;
 	}
-
 #else
-
-	assert( D_EVENT_MAXARGS == 8 );
-
-	switch( ev->GetNumArgs() ) {
-	case 0 :
-		( this->*callback )();
+	assert(D_EVENT_MAXARGS == 8);
+	// RB: 64 bit fixes, changed int to intptr_t
+	switch (ev->GetNumArgs())
+	{
+	case 0:
+		(this->*callback)();
 		break;
-
-	case 1 :
-		typedef void ( idClass::*eventCallback_1_t )( const int );
-		( this->*( eventCallback_1_t )callback )( data[ 0 ] );
+	case 1:
+		typedef void (idClass::* eventCallback_1_t)(const intptr_t);
+		(this->*(eventCallback_1_t)callback)(data[0]);
 		break;
-
-	case 2 :
-		typedef void ( idClass::*eventCallback_2_t )( const int, const int );
-		( this->*( eventCallback_2_t )callback )( data[ 0 ], data[ 1 ] );
+	case 2:
+		typedef void (idClass::* eventCallback_2_t)(const intptr_t, const intptr_t);
+		(this->*(eventCallback_2_t)callback)(data[0], data[1]);
 		break;
-
-	case 3 :
-		typedef void ( idClass::*eventCallback_3_t )( const int, const int, const int );
-		( this->*( eventCallback_3_t )callback )( data[ 0 ], data[ 1 ], data[ 2 ] );
+	case 3:
+		typedef void (idClass::* eventCallback_3_t)(const intptr_t, const intptr_t, const intptr_t);
+		(this->*(eventCallback_3_t)callback)(data[0], data[1], data[2]);
 		break;
-
-	case 4 :
-		typedef void ( idClass::*eventCallback_4_t )( const int, const int, const int, const int );
-		( this->*( eventCallback_4_t )callback )( data[ 0 ], data[ 1 ], data[ 2 ], data[ 3 ] );
+	case 4:
+		typedef void (idClass::* eventCallback_4_t)(const intptr_t, const intptr_t, const intptr_t, const intptr_t);
+		(this->*(eventCallback_4_t)callback)(data[0], data[1], data[2], data[3]);
 		break;
-
-	case 5 :
-		typedef void ( idClass::*eventCallback_5_t )( const int, const int, const int, const int, const int );
-		( this->*( eventCallback_5_t )callback )( data[ 0 ], data[ 1 ], data[ 2 ], data[ 3 ], data[ 4 ] );
+	case 5:
+		typedef void (idClass::* eventCallback_5_t)(const intptr_t, const intptr_t, const intptr_t, const intptr_t, const intptr_t);
+		(this->*(eventCallback_5_t)callback)(data[0], data[1], data[2], data[3], data[4]);
 		break;
-
-	case 6 :
-		typedef void ( idClass::*eventCallback_6_t )( const int, const int, const int, const int, const int, const int );
-		( this->*( eventCallback_6_t )callback )( data[ 0 ], data[ 1 ], data[ 2 ], data[ 3 ], data[ 4 ], data[ 5 ] );
+	case 6:
+		typedef void (idClass::* eventCallback_6_t)(const intptr_t, const intptr_t, const intptr_t, const intptr_t, const intptr_t, const intptr_t);
+		(this->*(eventCallback_6_t)callback)(data[0], data[1], data[2], data[3], data[4], data[5]);
 		break;
-
-	case 7 :
-		typedef void ( idClass::*eventCallback_7_t )( const int, const int, const int, const int, const int, const int, const int );
-		( this->*( eventCallback_7_t )callback )( data[ 0 ], data[ 1 ], data[ 2 ], data[ 3 ], data[ 4 ], data[ 5 ], data[ 6 ] );
+	case 7:
+		typedef void (idClass::* eventCallback_7_t)(const intptr_t, const intptr_t, const intptr_t, const intptr_t, const intptr_t, const intptr_t, const intptr_t);
+		(this->*(eventCallback_7_t)callback)(data[0], data[1], data[2], data[3], data[4], data[5], data[6]);
 		break;
-
-	case 8 :
-		typedef void ( idClass::*eventCallback_8_t )( const int, const int, const int, const int, const int, const int, const int, const int );
-		( this->*( eventCallback_8_t )callback )( data[ 0 ], data[ 1 ], data[ 2 ], data[ 3 ], data[ 4 ], data[ 5 ], data[ 6 ], data[ 7 ] );
+	case 8:
+		typedef void (idClass::* eventCallback_8_t)(const intptr_t, const intptr_t, const intptr_t, const intptr_t, const intptr_t, const intptr_t, const intptr_t, const intptr_t);
+		(this->*(eventCallback_8_t)callback)(data[0], data[1], data[2], data[3], data[4], data[5], data[6], data[7]);
 		break;
-
 	default:
-		gameLocal.Warning( "Invalid formatspec on event '%s'", ev->GetName() );
+		gameLocal.Warning("Invalid formatspec on event '%s'", ev->GetName());
 		break;
 	}
-
+	// RB end
 #endif
-
 	return true;
 }
 

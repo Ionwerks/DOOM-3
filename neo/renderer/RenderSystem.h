@@ -210,6 +210,14 @@ public:
 	virtual void			DrawBigChar( int x, int y, int ch, const idMaterial *material ) = 0;
 	virtual void			DrawBigStringExt( int x, int y, const char *string, const idVec4 &setColor, bool forceColor, const idMaterial *material ) = 0;
 
+	virtual void			SetEntireSceneMaterial(idMaterial* material) = 0; // HUMANHEAD CJR
+	virtual bool			IsScopeView() = 0;// HUMANHEAD CJR
+	virtual void			SetScopeView(bool view) = 0; // HUMANHEAD CJR
+	virtual bool			IsShuttleView() = 0;// HUMANHEAD pdm
+	virtual void			SetShuttleView(bool view) = 0;// HUMANHEAD pdm
+	virtual bool			SupportsFragmentPrograms(void) = 0; // HUMANHEAD CJR
+	virtual int				VideoCardNumber(void) = 0; // HUMANHEAD CJR
+
 	// dump all 2D drawing so far this frame to the demo file
 	virtual void			WriteDemoPics() = 0;
 

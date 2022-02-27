@@ -318,7 +318,12 @@ void idCollisionModelManagerLocal::TranslateTrmEdgeThroughPolygon( cm_traceWork_
 			dist = normal * trmEdge->start;
 			d1 = normal * start - dist;
 			d2 = normal * end - dist;
-			f1 = d1 / ( d1 - d2 );
+			if (d1 == d2) { //HUMANHEAD rww - CUFPF
+				f1 = 0.0f;
+			}
+			else {
+				f1 = d1 / ( d1 - d2 );
+			}
 			//assert( f1 >= 0.0f && f1 <= 1.0f );
 			tw->trace.c.point = start + f1 * ( end - start );
 			// if retrieving contacts
@@ -775,11 +780,11 @@ void idCollisionModelManagerLocal::Translation( trace_t *results, const idVec3 &
 	cm_trmPolygon_t *poly;
 	cm_trmEdge_t *edge;
 	cm_trmVertex_t *vert;
-	ALIGN16( static cm_traceWork_t tw );
+	ALIGN16( static cm_traceWork_t tw; )
 
-	assert( ((byte *)&start) < ((byte *)results) || ((byte *)&start) >= (((byte *)results) + sizeof( trace_t )) );
-	assert( ((byte *)&end) < ((byte *)results) || ((byte *)&end) >= (((byte *)results) + sizeof( trace_t )) );
-	assert( ((byte *)&trmAxis) < ((byte *)results) || ((byte *)&trmAxis) >= (((byte *)results) + sizeof( trace_t )) );
+	assert( ((byte *)&start) < ((byte *)results) || ((byte *)&start) > (((byte *)results) + sizeof( trace_t )) );
+	assert( ((byte *)&end) < ((byte *)results) || ((byte *)&end) > (((byte *)results) + sizeof( trace_t )) );
+	assert( ((byte *)&trmAxis) < ((byte *)results) || ((byte *)&trmAxis) > (((byte *)results) + sizeof( trace_t )) );
 
 	memset( results, 0, sizeof( *results ) );
 
@@ -804,7 +809,7 @@ void idCollisionModelManagerLocal::Translation( trace_t *results, const idVec3 &
 	if ( cm_debugCollision.GetBool() ) {
 		if ( !entered && !idCollisionModelManagerLocal::getContacts ) {
 			entered = 1;
-			// if already messed up to begin with
+			// if already fucked up to begin with
 			if ( idCollisionModelManagerLocal::Contents( start, trm, trmAxis, -1, model, modelOrigin, modelAxis ) & contentMask ) {
 				startsolid = true;
 			}
@@ -818,6 +823,7 @@ void idCollisionModelManagerLocal::Translation( trace_t *results, const idVec3 &
 	tw.trace.fraction = 1.0f;
 	tw.trace.c.contents = 0;
 	tw.trace.c.type = CONTACT_NONE;
+	tw.trace.c.id = 0;		// HUMANHEAD pdm: initialize so we don't get bogus values back
 	tw.contents = contentMask;
 	tw.isConvex = true;
 	tw.rotation = false;
@@ -906,6 +912,7 @@ void idCollisionModelManagerLocal::Translation( trace_t *results, const idVec3 &
 			session->rw->DebugArrow( colorRed, start, end, 1 );
 		}
 		common->Printf( "idCollisionModelManagerLocal::Translation: huge translation\n" );
+		common->Printf( " of entity: %s\n", tw.model->name.c_str() );	// HUMANHEAD
 		return;
 	}
 

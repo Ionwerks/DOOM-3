@@ -64,7 +64,7 @@ public:
 	bool					Load( idEntity *ent, const char *fileName );
 	bool					IsLoaded( void ) const { return isLoaded && self != NULL; }
 	const char *			GetName( void ) const { return name.c_str(); }
-	void					SetupPose( idEntity *ent, int time );
+	void					SetupPose( idEntity *ent, int time, bool checkPhysics = true ); // HUMANHEAD mdl:  Added checkPhysics flag
 	void					ChangePose( idEntity *ent, int time );
 	int						EntitiesTouchingAF( afTouch_t touchList[ MAX_GENTITIES ] ) const;
 	void					Start( void );
@@ -89,7 +89,10 @@ public:
 	void					LoadState( const idDict &args );
 
 	void					AddBindConstraints( void );
+	void					AddBindConstraint( constraintType_t type, int bodyId, jointHandle_t joint, idEntity *master );	// HUMANHEAD pdm
 	void					RemoveBindConstraints( void );
+
+	bool					TestSolidForce( bool &hiForce ) const; // HUMANHEAD mdl:  For handling ragdolls stuck in the wall
 
 protected:
 	idStr					name;				// name of the loaded .af file
@@ -114,6 +117,7 @@ protected:
 	bool					LoadBody( const idDeclAF_Body *fb, const idJointMat *joints );
 	bool					LoadConstraint( const idDeclAF_Constraint *fc );
 
+public:  // HUMANHEAD mdl:  Made public
 	bool					TestSolid( void ) const;
 };
 

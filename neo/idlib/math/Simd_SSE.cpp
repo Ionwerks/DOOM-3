@@ -40,590 +40,13 @@ If you have questions concerning this license or the applicable additional terms
 //                                                        E
 //===============================================================
 
-
-#if defined(MACOS_X) && defined(__i386__)
-
-#include <xmmintrin.h>
-
-#define DRAWVERT_SIZE				60
-#define DRAWVERT_XYZ_OFFSET			(0*4)
-#define DRAWVERT_ST_OFFSET			(3*4)
-#define DRAWVERT_NORMAL_OFFSET		(5*4)
-#define DRAWVERT_TANGENT0_OFFSET	(8*4)
-#define DRAWVERT_TANGENT1_OFFSET	(11*4)
-#define DRAWVERT_COLOR_OFFSET		(14*4)
-
-#define SHUFFLEPS( x, y, z, w )		(( (x) & 3 ) << 6 | ( (y) & 3 ) << 4 | ( (z) & 3 ) << 2 | ( (w) & 3 ))
-#define R_SHUFFLEPS( x, y, z, w )	(( (w) & 3 ) << 6 | ( (z) & 3 ) << 4 | ( (y) & 3 ) << 2 | ( (x) & 3 ))
-
-/*
-============
-idSIMD_SSE::GetName
-============
-*/
-const char * idSIMD_SSE::GetName( void ) const {
-	return "MMX & SSE";
-}
-
-/*
-============
-idSIMD_SSE::Dot
-
-  dst[i] = constant.Normal() * src[i].xyz + constant[3];
-============
-*/
-void VPCALL idSIMD_SSE::Dot( float *dst, const idPlane &constant, const idDrawVert *src, const int count ) {
-	// 0,  1,  2
-	// 3,  4,  5
-	// 6,  7,  8
-	// 9, 10, 11
-
-	/* 
-		mov			eax, count
-		mov			edi, constant
-		mov			edx, eax
-		mov			esi, src
-		mov			ecx, dst
-	*/	
-	__m128 xmm0, xmm1, xmm2, xmm3, xmm4, xmm5, xmm6, xmm7; 	// Declare 8 xmm registers. 
-	int count_l4 = count;                                   // count_l4 = eax
-	int count_l1 = count;                                   // count_l1 = edx
-	char *constant_p = (char *)&constant;                   // constant_p = edi
-	char *src_p = (char *) src;                             // src_p = esi
-	char *dst_p = (char *) dst;                             // dst_p = ecx
-
-	assert( sizeof( idDrawVert ) == DRAWVERT_SIZE );
-	assert( (int)&((idDrawVert *)0)->xyz == DRAWVERT_XYZ_OFFSET );
-	
-	/*
-		and			eax, ~3
-		movss		xmm4, [edi+0]
-		shufps		xmm4, xmm4, R_SHUFFLEPS( 0, 0, 0, 0 )
-		movss		xmm5, [edi+4]
-		shufps		xmm5, xmm5, R_SHUFFLEPS( 0, 0, 0, 0 )
-		movss		xmm6, [edi+8]
-		shufps		xmm6, xmm6, R_SHUFFLEPS( 0, 0, 0, 0 )
-		movss		xmm7, [edi+12]
-		shufps		xmm7, xmm7, R_SHUFFLEPS( 0, 0, 0, 0 )
-	*/
-	count_l4 = count_l4 & ~3;
-	xmm4 = _mm_load_ss((float *) (constant_p));
-	xmm4 = _mm_shuffle_ps(xmm4, xmm4, R_SHUFFLEPS( 0, 0, 0, 0 ));
-	xmm5 = _mm_load_ss((float *) (constant_p + 4));
-	xmm5 = _mm_shuffle_ps(xmm5, xmm5, R_SHUFFLEPS( 0, 0, 0, 0 ));
-	xmm6 = _mm_load_ss((float *) (constant_p + 8));
-	xmm6 = _mm_shuffle_ps(xmm6, xmm6, R_SHUFFLEPS( 0, 0, 0, 0 ));	
-	xmm7 = _mm_load_ss((float *) (constant_p + 12));	
- 	xmm7 = _mm_shuffle_ps(xmm7, xmm7, R_SHUFFLEPS( 0, 0, 0, 0 ));	
-	
-	/*
-		jz			startVert1
-	*/
-	if(count_l4 != 0) {
-	/*
-		imul		eax, DRAWVERT_SIZE
-		add			esi, eax
-		neg			eax
-	*/
-		count_l4 = count_l4 * DRAWVERT_SIZE;
-		src_p = src_p + count_l4;
-		count_l4 = -count_l4;
-	/*
-	loopVert4:
-	*/
-		do {
-	/*
-		movss		xmm0, [esi+eax+1*DRAWVERT_SIZE+DRAWVERT_XYZ_OFFSET+0]	//  3,  X,  X,  X
-		movss		xmm2, [esi+eax+0*DRAWVERT_SIZE+DRAWVERT_XYZ_OFFSET+8]	//  2,  X,  X,  X
-		movhps		xmm0, [esi+eax+0*DRAWVERT_SIZE+DRAWVERT_XYZ_OFFSET+0]	//  3,  X,  0,  1
-		movaps		xmm1, xmm0												//  3,  X,  0,  1
-	*/
-			xmm0 = _mm_load_ss((float *) (src_p+count_l4+1*DRAWVERT_SIZE+DRAWVERT_XYZ_OFFSET+0));        // 3,  X,  X,  X
-			xmm2 = _mm_load_ss((float *) (src_p+count_l4+0*DRAWVERT_SIZE+DRAWVERT_XYZ_OFFSET+8));        // 2,  X,  X,  X
-			xmm0 = _mm_loadh_pi(xmm0, (__m64 *) (src_p+count_l4+0*DRAWVERT_SIZE+DRAWVERT_XYZ_OFFSET+0)); // 3,  X,  0,  1
-			xmm1 = xmm0;							                                                    // 3,  X,  0,  1
-		
-	/*		
-		movlps		xmm1, [esi+eax+1*DRAWVERT_SIZE+DRAWVERT_XYZ_OFFSET+4]	//  4,  5,  0,  1
-		shufps		xmm2, xmm1, R_SHUFFLEPS( 0, 1, 0, 1 )					//  2,  X,  4,  5
-	*/
-			xmm1 = _mm_loadl_pi(xmm1, (__m64 *) (src_p+count_l4+1*DRAWVERT_SIZE+DRAWVERT_XYZ_OFFSET+4)); // 4,  5,  0,  1
-			xmm2 = _mm_shuffle_ps(xmm2, xmm1, R_SHUFFLEPS( 0, 1, 0, 1 ));                               // 2,  X,  4,  5
-			
-	/*
-		movss		xmm3, [esi+eax+3*DRAWVERT_SIZE+DRAWVERT_XYZ_OFFSET+0]	//  9,  X,  X,  X
-		movhps		xmm3, [esi+eax+2*DRAWVERT_SIZE+DRAWVERT_XYZ_OFFSET+0]	//  9,  X,  6,  7
-		shufps		xmm0, xmm3, R_SHUFFLEPS( 2, 0, 2, 0 )					//  0,  3,  6,  9
-	*/
-			xmm3 = _mm_load_ss((float *) (src_p+count_l4+3*DRAWVERT_SIZE+DRAWVERT_XYZ_OFFSET+0));        // 9,  X,  X,  X
-			xmm3 = _mm_loadh_pi(xmm3, (__m64 *) (src_p+count_l4+2*DRAWVERT_SIZE+DRAWVERT_XYZ_OFFSET+0)); // 9,  X,  6,  7
-			xmm0 = _mm_shuffle_ps(xmm0, xmm3, R_SHUFFLEPS( 2, 0, 2, 0 ));                               // 0,  3,  6,  9
-	/*
-		movlps		xmm3, [esi+eax+3*DRAWVERT_SIZE+DRAWVERT_XYZ_OFFSET+4]	// 10, 11,  6,  7
-		shufps		xmm1, xmm3, R_SHUFFLEPS( 3, 0, 3, 0 )					//  1,  4,  7, 10
-	*/
-			xmm3 = _mm_loadl_pi(xmm3, (__m64 *)(src_p+count_l4+3*DRAWVERT_SIZE+DRAWVERT_XYZ_OFFSET+4));  // 10, 11, 6,  7
-			xmm1 = _mm_shuffle_ps(xmm1, xmm3, R_SHUFFLEPS( 3, 0, 3, 0 ));                               // 1,  4,  7,  10
-	/*
-		movhps		xmm3, [esi+eax+2*DRAWVERT_SIZE+DRAWVERT_XYZ_OFFSET+8]	// 10, 11,  8,  X
-		shufps		xmm2, xmm3, R_SHUFFLEPS( 0, 3, 2, 1 )					//  2,  5,  8, 11
-	*/		
-			xmm3 = _mm_loadh_pi(xmm3, (__m64 *)(src_p+count_l4+2*DRAWVERT_SIZE+DRAWVERT_XYZ_OFFSET+8));  // 10, 11, 8,  X
-			xmm2 = _mm_shuffle_ps(xmm2, xmm3, R_SHUFFLEPS( 0, 3, 2, 1 ));                               // 2,  5,  8,  11
-	
-	/*
-		add			ecx, 16
-		add			eax, 4*DRAWVERT_SIZE
-	*/
-			dst_p = dst_p + 16;
-			count_l4 = count_l4 + 4*DRAWVERT_SIZE;
-		
-	/*
-		mulps		xmm0, xmm4
-		mulps		xmm1, xmm5
-		mulps		xmm2, xmm6
-		addps		xmm0, xmm7
-		addps		xmm0, xmm1
-		addps		xmm0, xmm2
-	*/
-			xmm0 = _mm_mul_ps(xmm0, xmm4);
-			xmm1 = _mm_mul_ps(xmm1, xmm5);
-			xmm2 = _mm_mul_ps(xmm2, xmm6);
-			xmm0 = _mm_add_ps(xmm0, xmm7);
-			xmm0 = _mm_add_ps(xmm0, xmm1);
-			xmm0 = _mm_add_ps(xmm0, xmm2);
-			
-	/*
-		movlps		[ecx-16+0], xmm0
-		movhps		[ecx-16+8], xmm0
-		jl			loopVert4
-	*/
-			_mm_storel_pi((__m64 *) (dst_p-16+0), xmm0);
-			_mm_storeh_pi((__m64 *) (dst_p-16+8), xmm0);
-		} while(count_l4 < 0);
-	}
-	
-	/*
-	startVert1:
-		and			edx, 3
-		jz			done
-	*/
-	count_l1 = count_l1 & 3;
-	if(count_l1 != 0) {
-	/*
-		loopVert1:
-		movss		xmm0, [esi+eax+DRAWVERT_XYZ_OFFSET+0]
-		movss		xmm1, [esi+eax+DRAWVERT_XYZ_OFFSET+4]
-		movss		xmm2, [esi+eax+DRAWVERT_XYZ_OFFSET+8]
-		mulss		xmm0, xmm4
-		mulss		xmm1, xmm5
-		mulss		xmm2, xmm6
-		addss		xmm0, xmm7
-		add			ecx, 4
-		addss		xmm0, xmm1
-		add			eax, DRAWVERT_SIZE
-		addss		xmm0, xmm2
-		dec			edx
-		movss		[ecx-4], xmm0
-		jnz			loopVert1
-	*/
-		do {
-			xmm0 = _mm_load_ss((float *) (src_p+count_l4+DRAWVERT_XYZ_OFFSET+0));
-			xmm1 = _mm_load_ss((float *) (src_p+count_l4+DRAWVERT_XYZ_OFFSET+4));
-			xmm2 = _mm_load_ss((float *) (src_p+count_l4+DRAWVERT_XYZ_OFFSET+8));
-			xmm0 = _mm_mul_ss(xmm0, xmm4);
-			xmm1 = _mm_mul_ss(xmm1, xmm5);
-			xmm2 = _mm_mul_ss(xmm2, xmm6);
-			xmm0 = _mm_add_ss(xmm0, xmm7);
-			dst_p = dst_p + 4;
-			xmm0 = _mm_add_ss(xmm0, xmm1);
-			count_l4 = count_l4 + DRAWVERT_SIZE;
-			xmm0 = _mm_add_ss(xmm0, xmm2);
-			count_l1 = count_l1 - 1;		
-			_mm_store_ss((float *) (dst_p-4), xmm0);
-		} while( count_l1 != 0);
-	}
-	/*
-		done:
-	*/
-}
-
-/*
-============
-idSIMD_SSE::MinMax
-============
-*/
-void VPCALL idSIMD_SSE::MinMax( idVec3 &min, idVec3 &max, const idDrawVert *src, const int *indexes, const int count ) {
-
-	assert( sizeof( idDrawVert ) == DRAWVERT_SIZE );
-	assert( (int)&((idDrawVert *)0)->xyz == DRAWVERT_XYZ_OFFSET );
-
-	__m128 xmm0, xmm1, xmm2, xmm3, xmm4, xmm5, xmm6, xmm7;
-	char *indexes_p;
-	char *src_p;
-	int count_l;
-	int edx;
-	char *min_p;
-	char *max_p;
-	
-	/*
-		movss		xmm0, idMath::INFINITY
-		xorps		xmm1, xmm1
-		shufps		xmm0, xmm0, R_SHUFFLEPS( 0, 0, 0, 0 )
-		subps		xmm1, xmm0
-		movaps		xmm2, xmm0
-		movaps		xmm3, xmm1
-	*/
-		xmm0 = _mm_load_ss(&idMath::INFINITY);
-		// To satisfy the compiler use xmm0 instead. 
-		xmm1 = _mm_xor_ps(xmm0, xmm0);
-		xmm0 = _mm_shuffle_ps(xmm0, xmm0, R_SHUFFLEPS( 0, 0, 0, 0 ));
-		xmm1 = _mm_sub_ps(xmm1, xmm0);
-		xmm2 = xmm0;
-		xmm3 = xmm1;
-
-	/*
-		mov			edi, indexes
-		mov			esi, src
-		mov			eax, count
-		and			eax, ~3
-		jz			done4
-	*/
-		indexes_p = (char *) indexes;
-		src_p = (char *) src;
-		count_l = count;
-		count_l = count_l & ~3;
-		if(count_l != 0) {
-	/*
-		shl			eax, 2
-		add			edi, eax
-		neg			eax
-	*/
-			count_l = count_l << 2;
-			indexes_p = indexes_p + count_l;
-			count_l = -count_l;
-	/*
-	loop4:
-//		prefetchnta	[edi+128]
-//		prefetchnta	[esi+4*DRAWVERT_SIZE+DRAWVERT_XYZ_OFFSET]
-	*/
-		do {
-	/*
-		mov			edx, [edi+eax+0]
-		imul		edx, DRAWVERT_SIZE
-		movss		xmm4, [esi+edx+DRAWVERT_XYZ_OFFSET+8]
-		movhps		xmm4, [esi+edx+DRAWVERT_XYZ_OFFSET+0]
-		minps		xmm0, xmm4
-		maxps		xmm1, xmm4
-	*/
-			edx = *((int*)(indexes_p+count_l+0));
-			edx = edx * DRAWVERT_SIZE;
-			xmm4 = _mm_load_ss((float *) (src_p+edx+DRAWVERT_XYZ_OFFSET+8));
-			xmm4 = _mm_loadh_pi(xmm4, (__m64 *) (src_p+edx+DRAWVERT_XYZ_OFFSET+0) );
-			xmm0 = _mm_min_ps(xmm0, xmm4);
-			xmm1 = _mm_max_ps(xmm1, xmm4);
-		
-	/*
-		mov			edx, [edi+eax+4]
-		imul		edx, DRAWVERT_SIZE
-		movss		xmm5, [esi+edx+DRAWVERT_XYZ_OFFSET+0]
-		movhps		xmm5, [esi+edx+DRAWVERT_XYZ_OFFSET+4]
-		minps		xmm2, xmm5
-		maxps		xmm3, xmm5
-	*/
-			edx = *((int*)(indexes_p+count_l+4));
-			edx = edx * DRAWVERT_SIZE;
-			xmm5 = _mm_load_ss((float *) (src_p+edx+DRAWVERT_XYZ_OFFSET+0));
-			xmm5 = _mm_loadh_pi(xmm5, (__m64 *) (src_p+edx+DRAWVERT_XYZ_OFFSET+4) );
-			xmm2 = _mm_min_ps(xmm2, xmm5);
-			xmm3 = _mm_max_ps(xmm3, xmm5);		
-		
-	/*
-		mov			edx, [edi+eax+8]
-		imul		edx, DRAWVERT_SIZE
-		movss		xmm6, [esi+edx+DRAWVERT_XYZ_OFFSET+8]
-		movhps		xmm6, [esi+edx+DRAWVERT_XYZ_OFFSET+0]
-		minps		xmm0, xmm6
-		maxps		xmm1, xmm6
-	*/
-			edx = *((int*)(indexes_p+count_l+8));
-			edx = edx * DRAWVERT_SIZE;
-			xmm6 = _mm_load_ss((float *) (src_p+edx+DRAWVERT_XYZ_OFFSET+8));
-			xmm6 = _mm_loadh_pi(xmm6, (__m64 *) (src_p+edx+DRAWVERT_XYZ_OFFSET+0) );
-			xmm0 = _mm_min_ps(xmm0, xmm6);
-			xmm1 = _mm_max_ps(xmm1, xmm6);
-		
-	/*
-		mov			edx, [edi+eax+12]
-		imul		edx, DRAWVERT_SIZE
-		movss		xmm7, [esi+edx+DRAWVERT_XYZ_OFFSET+0]
-		movhps		xmm7, [esi+edx+DRAWVERT_XYZ_OFFSET+4]
-		minps		xmm2, xmm7
-		maxps		xmm3, xmm7
-	*/
-			edx = *((int*)(indexes_p+count_l+12));
-			edx = edx * DRAWVERT_SIZE;
-			xmm7 = _mm_load_ss((float *) (src_p+edx+DRAWVERT_XYZ_OFFSET+0));
-			xmm7 = _mm_loadh_pi(xmm7, (__m64 *) (src_p+edx+DRAWVERT_XYZ_OFFSET+4) );
-			xmm2 = _mm_min_ps(xmm2, xmm7);
-			xmm3 = _mm_max_ps(xmm3, xmm7);	
-
-	/*
-		add			eax, 4*4
-		jl			loop4
-	*/
-			count_l = count_l + 4*4;
-		} while (count_l < 0);
-	}
-	/*
-	done4:
-		mov			eax, count
-		and			eax, 3
-		jz			done1
-	*/
-	count_l = count;
-	count_l = count_l & 3;
-	if(count_l != 0) {
-	/*
-		shl			eax, 2
-		add			edi, eax
-		neg			eax
-	*/
-		count_l = count_l << 2;
-		indexes_p = indexes_p + count_l;
-		count_l = -count_l;
-	/*
-	loop1:		
-	*/
-		do{
-	/*
-		mov			edx, [edi+eax+0]
-		imul		edx, DRAWVERT_SIZE;
-		movss		xmm4, [esi+edx+DRAWVERT_XYZ_OFFSET+8]
-		movhps		xmm4, [esi+edx+DRAWVERT_XYZ_OFFSET+0]
-		minps		xmm0, xmm4
-		maxps		xmm1, xmm4
-	*/
-			edx = *((int*)(indexes_p+count_l+0));
-			edx = edx * DRAWVERT_SIZE;
-			xmm4 = _mm_load_ss((float *) (src_p+edx+DRAWVERT_XYZ_OFFSET+8));
-			xmm4 = _mm_loadh_pi(xmm4, (__m64 *) (src_p+edx+DRAWVERT_XYZ_OFFSET+0) );
-			xmm0 = _mm_min_ps(xmm0, xmm4);
-			xmm1 = _mm_max_ps(xmm1, xmm4);
-	
-	/*
-		add			eax, 4
-		jl			loop1
-	*/
-			count_l = count_l + 4;
-		} while (count_l < 0);
-	
-	}
-
-	/*	
-	done1:
-		shufps		xmm2, xmm2, R_SHUFFLEPS( 3, 1, 0, 2 )
-		shufps		xmm3, xmm3, R_SHUFFLEPS( 3, 1, 0, 2 )
-		minps		xmm0, xmm2
-		maxps		xmm1, xmm3
-		mov			esi, min
-		movhps		[esi], xmm0
-		movss		[esi+8], xmm0
-		mov			edi, max
-		movhps		[edi], xmm1
-		movss		[edi+8], xmm1
-	*/
-	xmm2 = _mm_shuffle_ps(xmm2, xmm2, R_SHUFFLEPS( 3, 1, 0, 2 ));
-	xmm3 = _mm_shuffle_ps(xmm3, xmm3, R_SHUFFLEPS( 3, 1, 0, 2 ));
-	xmm0 = _mm_min_ps(xmm0, xmm2);
-	xmm1 = _mm_max_ps(xmm1, xmm3);
-	min_p = (char *) &min;
-	_mm_storeh_pi((__m64 *)(min_p), xmm0);
-	_mm_store_ss((float *)(min_p+8), xmm0);
-	max_p = (char *) &max;
-	_mm_storeh_pi((__m64 *)(max_p), xmm1);
-	_mm_store_ss((float *)(max_p+8), xmm1);
-}
-
-/*
-============
-idSIMD_SSE::Dot
-
-  dst[i] = constant * src[i].Normal() + src[i][3];
-============
-*/
-void VPCALL idSIMD_SSE::Dot( float *dst, const idVec3 &constant, const idPlane *src, const int count ) {
-	int count_l4;
-	int count_l1;
-	char *constant_p;
-	char *src_p;
-	char *dst_p;
-	__m128 xmm0, xmm1, xmm2, xmm3, xmm4, xmm5, xmm6, xmm7;
-
-	/*
-		mov			eax, count
-		mov			edi, constant
-		mov			edx, eax
-		mov			esi, src
-		mov			ecx, dst
-		and			eax, ~3
-	*/
-	count_l4 = count;
-	constant_p = (char *) &constant;
-	count_l1 = count_l4;
-	src_p = (char *) src;
-	dst_p = (char *) dst;
-	count_l4 = count_l4 & ~3;
-
-	/*
-		movss		xmm5, [edi+0]
-		shufps		xmm5, xmm5, R_SHUFFLEPS( 0, 0, 0, 0 )
-		movss		xmm6, [edi+4]
-		shufps		xmm6, xmm6, R_SHUFFLEPS( 0, 0, 0, 0 )
-		movss		xmm7, [edi+8]
-		shufps		xmm7, xmm7, R_SHUFFLEPS( 0, 0, 0, 0 )
-	*/
-	xmm5 = _mm_load_ss((float *) (constant_p+0));
-	xmm5 = _mm_shuffle_ps(xmm5, xmm5, R_SHUFFLEPS( 0, 0, 0, 0 ));
-	xmm6 = _mm_load_ss((float *) (constant_p+4));
-	xmm6 = _mm_shuffle_ps(xmm6, xmm6, R_SHUFFLEPS( 0, 0, 0, 0 ));
-	xmm7 = _mm_load_ss((float *) (constant_p+8));
-	xmm7 = _mm_shuffle_ps(xmm7, xmm7, R_SHUFFLEPS( 0, 0, 0, 0 ));
-	
-	/*
-		jz			startVert1
-	*/
-	if (count != 0) {
-	/*
-		imul		eax, 16
-		add			esi, eax
-		neg			eax
-	*/
-		count_l4 = count_l4 * 16;
-		src_p = src_p + count_l4;
-		count_l4 = -count_l4;
-	/*
-	loopVert4:		
-	*/
-		do {
-	/*
-		movlps		xmm1, [esi+eax+ 0]
-		movlps		xmm3, [esi+eax+ 8]
-		movhps		xmm1, [esi+eax+16]
-		movhps		xmm3, [esi+eax+24]
-		movlps		xmm2, [esi+eax+32]
-		movlps		xmm4, [esi+eax+40]
-		movhps		xmm2, [esi+eax+48]
-		movhps		xmm4, [esi+eax+56]
-		movaps		xmm0, xmm1
-		shufps		xmm0, xmm2, R_SHUFFLEPS( 0, 2, 0, 2 )
-		shufps		xmm1, xmm2, R_SHUFFLEPS( 1, 3, 1, 3 )
-		movaps		xmm2, xmm3
-		shufps		xmm2, xmm4, R_SHUFFLEPS( 0, 2, 0, 2 )
-		shufps		xmm3, xmm4, R_SHUFFLEPS( 1, 3, 1, 3 )
-	*/
-			xmm1 = _mm_loadl_pi(xmm1, (__m64 *)(src_p+count_l4+ 0));
-			xmm3 = _mm_loadl_pi(xmm3, (__m64 *)(src_p+count_l4+ 8));
-			xmm1 = _mm_loadh_pi(xmm1, (__m64 *)(src_p+count_l4+16));
-			xmm3 = _mm_loadh_pi(xmm3, (__m64 *)(src_p+count_l4+24));
-			xmm2 = _mm_loadl_pi(xmm2, (__m64 *)(src_p+count_l4+32));
-			xmm4 = _mm_loadl_pi(xmm4, (__m64 *)(src_p+count_l4+40));
-			xmm2 = _mm_loadh_pi(xmm2, (__m64 *)(src_p+count_l4+48));
-			xmm4 = _mm_loadh_pi(xmm4, (__m64 *)(src_p+count_l4+56));
-
-			xmm0 = xmm1;
-			xmm0 = _mm_shuffle_ps(xmm0, xmm2, R_SHUFFLEPS( 0, 2, 0, 2 ));
-			xmm1 = _mm_shuffle_ps(xmm1, xmm2, R_SHUFFLEPS( 1, 3, 1, 3 ));
-			xmm2 = xmm3;
-			xmm2 = _mm_shuffle_ps(xmm2, xmm4, R_SHUFFLEPS( 0, 2, 0, 2 ));
-			xmm3 = _mm_shuffle_ps(xmm3, xmm4, R_SHUFFLEPS( 1, 3, 1, 3 ));
-		
-	/*
-		add			ecx, 16
-		add			eax, 4*16
-	*/
-			dst_p = dst_p + 16;
-			count_l4 = count_l4 + 4*16;
-		
-	/*
-		mulps		xmm0, xmm5
-		mulps		xmm1, xmm6
-		mulps		xmm2, xmm7
-		addps		xmm0, xmm3
-		addps		xmm0, xmm1
-		addps		xmm0, xmm2
-	*/
-			xmm0 = _mm_mul_ps(xmm0, xmm5);
-			xmm1 = _mm_mul_ps(xmm1, xmm6);
-			xmm2 = _mm_mul_ps(xmm2, xmm7);		
-			xmm0 = _mm_add_ps(xmm0, xmm3);
-			xmm0 = _mm_add_ps(xmm0, xmm1);
-			xmm0 = _mm_add_ps(xmm0, xmm2);		
-		
-	/*
-		movlps		[ecx-16+0], xmm0
-		movhps		[ecx-16+8], xmm0
-		jl			loopVert4
-	*/
-			_mm_storel_pi((__m64 *) (dst_p-16+0), xmm0);
-			_mm_storeh_pi((__m64 *) (dst_p-16+8), xmm0);
-		} while (count_l4 < 0);	
-	}
-
-	/*
-	startVert1:
-		and			edx, 3
-		jz			done
-	*/
-	count_l1 = count_l1 & 3;
-
-	if(count_l1 != 0) {
-	/*
-	loopVert1:	
-	*/
-		do {
-	/*
-		movss		xmm0, [esi+eax+0]
-		movss		xmm1, [esi+eax+4]
-		movss		xmm2, [esi+eax+8]
-		mulss		xmm0, xmm5
-		mulss		xmm1, xmm6
-		mulss		xmm2, xmm7
-		addss		xmm0, [esi+eax+12]
-		add			ecx, 4
-		addss		xmm0, xmm1
-		add			eax, 16
-		addss		xmm0, xmm2
-		dec			edx
-		movss		[ecx-4], xmm0
-		jnz			loopVert1
-	*/
-			xmm0 = _mm_load_ss((float *) (src_p+count_l4+ 0));
-			xmm1 = _mm_load_ss((float *) (src_p+count_l4+ 4));
-			xmm2 = _mm_load_ss((float *) (src_p+count_l4+ 8));
-			xmm3 = _mm_load_ss((float *) (src_p+count_l4+12));
-						
-			xmm0 = _mm_mul_ss(xmm0, xmm5);
-			xmm1 = _mm_mul_ss(xmm1, xmm6);
-			xmm2 = _mm_mul_ss(xmm2, xmm7);
-			
-			xmm0 = _mm_add_ss(xmm0, xmm3);
-			dst_p = dst_p + 4;
-			xmm0 = _mm_add_ss(xmm0, xmm1);
-			count_l4 = count_l4 + 16;
-			xmm0 = _mm_add_ss(xmm0, xmm2);
-			count_l1 = count_l1 - 1;
-			_mm_store_ss((float *) (dst_p-4), xmm0);
-		} while (count_l1 != 0);
-	}
-	/*
-	done:
-	*/
-}
-
-#elif defined(_WIN32)
+#ifdef _WIN32
 
 #include <xmmintrin.h>
+
+//HUMANHEAD rww - disable this since all the code is pushing ebx before modifying it
+#pragma warning(disable:4731) //warning C4731: 'x' : frame pointer register 'ebx' modified by inline assembly code
+//HUMANHEAD END
 
 #define SHUFFLEPS( x, y, z, w )		(( (x) & 3 ) << 6 | ( (y) & 3 ) << 4 | ( (z) & 3 ) << 2 | ( (w) & 3 ))
 #define R_SHUFFLEPS( x, y, z, w )	(( (w) & 3 ) << 6 | ( (z) & 3 ) << 4 | ( (y) & 3 ) << 2 | ( (x) & 3 ))
@@ -1007,7 +430,9 @@ void VPCALL idSIMD_SSE::Dot( float *dst, const idVec3 &constant, const idPlane *
 
 #define JOINTQUAT_SIZE				(7*4)
 #define JOINTMAT_SIZE				(4*3*4)
+#if !NEW_MESH_TRANSFORM
 #define JOINTWEIGHT_SIZE			(4*4)
+#endif
 
 
 #define ALIGN4_INIT1( X, INIT )				ALIGN16( static X[4] ) = { INIT, INIT, INIT, INIT }
@@ -1041,6 +466,7 @@ ALIGN4_INIT1( float SIMD_SP_halfPI, idMath::HALF_PI );
 ALIGN4_INIT1( float SIMD_SP_twoPI, idMath::TWO_PI );
 ALIGN4_INIT1( float SIMD_SP_oneOverTwoPI, 1.0f / idMath::TWO_PI );
 ALIGN4_INIT1( float SIMD_SP_infinity, idMath::INFINITY );
+ALIGN4_INIT1( float SIMD_SP_negInfinity, -idMath::INFINITY );
 ALIGN4_INIT4( float SIMD_SP_lastOne, 0.0f, 0.0f, 0.0f, 1.0f );
 
 ALIGN4_INIT1( float SIMD_SP_rsqrt_c0,  3.0f );
@@ -3460,6 +2886,10 @@ void VPCALL idSIMD_SSE::Dot( float &dot, const float *src1, const float *src2, c
 		dst[i] |= ( src0[i] CMP c ) << BITNUM;											\
 	}
 
+//HUMANHEAD rww
+#pragma warning(disable:4740) //warning C4740: flow in or out of inline asm code suppresses global optimization
+//HUMANHEAD END
+
 /*
 ============
 idSIMD_SSE::CmpGT
@@ -3547,6 +2977,10 @@ idSIMD_SSE::CmpLE
 void VPCALL idSIMD_SSE::CmpLE( byte *dst, const byte bitNum, const float *src0, const float constant, const int count ) {
 	COMPAREBITCONSTANT( dst, bitNum, src0, constant, count, <=, cmpnleps, FLIP )
 }
+
+//HUMANHEAD rww
+#pragma warning(default:4740) //warning C4740: flow in or out of inline asm code suppresses global optimization
+//HUMANHEAD END
 
 /*
 ============
@@ -11295,20 +10729,20 @@ void VPCALL idSIMD_SSE::BlendJoints( idJointQuat *joints, const idJointQuat *ble
 	}
 
 	for ( i = 0; i <= numJoints - 4; i += 4 ) {
-		ALIGN16( float jointVert0[4] );
-		ALIGN16( float jointVert1[4] );
-		ALIGN16( float jointVert2[4] );
-		ALIGN16( float blendVert0[4] );
-		ALIGN16( float blendVert1[4] );
-		ALIGN16( float blendVert2[4] );
-		ALIGN16( float jointQuat0[4] );
-		ALIGN16( float jointQuat1[4] );
-		ALIGN16( float jointQuat2[4] );
-		ALIGN16( float jointQuat3[4] );
-		ALIGN16( float blendQuat0[4] );
-		ALIGN16( float blendQuat1[4] );
-		ALIGN16( float blendQuat2[4] );
-		ALIGN16( float blendQuat3[4] );
+		ALIGN16( float jointVert0[4]; )
+		ALIGN16( float jointVert1[4]; )
+		ALIGN16( float jointVert2[4]; )
+		ALIGN16( float blendVert0[4]; )
+		ALIGN16( float blendVert1[4]; )
+		ALIGN16( float blendVert2[4]; )
+		ALIGN16( float jointQuat0[4]; )
+		ALIGN16( float jointQuat1[4]; )
+		ALIGN16( float jointQuat2[4]; )
+		ALIGN16( float jointQuat3[4]; )
+		ALIGN16( float blendQuat0[4]; )
+		ALIGN16( float blendQuat1[4]; )
+		ALIGN16( float blendQuat2[4]; )
+		ALIGN16( float blendQuat3[4]; )
 
 		for ( int j = 0; j < 4; j++ ) {
 			int n = index[i+j];
@@ -11521,13 +10955,13 @@ void VPCALL idSIMD_SSE::BlendJoints( idJointQuat *joints, const idJointQuat *ble
 		jointVert2[2] += lerp * ( blendVert2[2] - jointVert2[2] );
 		jointVert2[3] += lerp * ( blendVert2[3] - jointVert2[3] );
 
-		ALIGN16( float cosom[4] );
-		ALIGN16( float sinom[4] );
-		ALIGN16( float omega0[4] );
-		ALIGN16( float omega1[4] );
-		ALIGN16( float scale0[4] );
-		ALIGN16( float scale1[4] );
-		ALIGN16( unsigned long signBit[4] );
+		ALIGN16( float cosom[4]; )
+		ALIGN16( float sinom[4]; )
+		ALIGN16( float omega0[4]; )
+		ALIGN16( float omega1[4]; )
+		ALIGN16( float scale0[4]; )
+		ALIGN16( float scale1[4]; )
+		ALIGN16( unsigned long signBit[4]; )
 
 		cosom[0] = jointQuat0[0] * blendQuat0[0];
 		cosom[1] = jointQuat0[1] * blendQuat0[1];
@@ -11760,7 +11194,7 @@ void VPCALL idSIMD_SSE::ConvertJointMatsToJointQuats( idJointQuat *jointQuats, c
 
 #if 1
 
-	ALIGN16( byte shuffle[16] );
+	ALIGN16( byte shuffle[16]; )
 
 	__asm {
 		mov			eax, numJoints
@@ -12474,6 +11908,13 @@ void VPCALL idSIMD_SSE::UntransformJoints( idJointMat *jointMats, const int *par
 #endif
 }
 
+//HUMANHEAD rww
+#ifdef _HH_TRANSFORMVERTS_BENCH
+int transformVertBenchFrameValue = 0;
+int transformVertDebugValue = 0;
+#endif
+//HUMANHEAD END
+
 /*
 ============
 idSIMD_SSE::TransformVerts
@@ -12486,6 +11927,25 @@ void VPCALL idSIMD_SSE::TransformVerts( idDrawVert *verts, const int numVerts, c
 	assert( (int)&((idDrawVert *)0)->xyz == DRAWVERT_XYZ_OFFSET );
 	assert( sizeof( idVec4 ) == JOINTWEIGHT_SIZE );
 	assert( sizeof( idJointMat ) == JOINTMAT_SIZE );
+
+#ifdef _HH_TRANSFORMVERTS_BENCH //HUMANHEAD rww
+	//static unsigned char cacheArray[524288]; //sizeof(l2 cache)
+	//memset(cacheArray, 0, 524288);
+	//flushing the cache shows significant performance benefits from prefetching.
+	//in the common case, however, it can sometimes slow the routine down as well.
+	//further tweaking with prefetching offsets may prove to find a happy medium
+	//that offers consistent speedup, but for now i am leaving prefetching out.
+
+	__int64 start, end;
+	__int64 *pStart = &start, *pEnd = &end;
+
+	__asm {
+		rdtsc					//stuff number of clock cycles since computer boot into eax+edx
+		mov		ebx,pStart
+		mov		[ebx],eax		//put eax in low 4 bytes
+		mov		[ebx+4],edx		//put edx in high 4 bytes
+	}
+#endif //HUMANHEAD END
 
 	__asm
 	{
@@ -12563,6 +12023,17 @@ void VPCALL idSIMD_SSE::TransformVerts( idDrawVert *verts, const int numVerts, c
 	done:
 	}
 
+#ifdef _HH_TRANSFORMVERTS_BENCH //HUMANHEAD rww
+	__asm {
+		rdtsc					//stuff number of clock cycles since computer boot into eax+edx
+		mov		ebx,pEnd
+		mov		[ebx],eax		//put eax in low 4 bytes
+		mov		[ebx+4],edx		//put edx in high 4 bytes
+	}
+
+	transformVertBenchFrameValue += (end-start);
+#endif //HUMANHEAD END
+
 #else
 
 	int i, j;
@@ -12583,6 +12054,598 @@ void VPCALL idSIMD_SSE::TransformVerts( idDrawVert *verts, const int numVerts, c
 
 #endif
 }
+
+#if NEW_MESH_TRANSFORM
+
+#define SHUFFLE_PS( x, y, z, w )	(( (x) & 3 ) << 6 | ( (y) & 3 ) << 4 | ( (z) & 3 ) << 2 | ( (w) & 3 ))
+#define R_SHUFFLE_PS( x, y, z, w )	(( (w) & 3 ) << 6 | ( (z) & 3 ) << 4 | ( (y) & 3 ) << 2 | ( (x) & 3 ))
+
+#define SHUFFLE_PD( x, y )			(( (x) & 1 ) << 1 | ( (y) & 1 ))
+#define R_SHUFFLE_PD( x, y )		(( (y) & 1 ) << 1 | ( (x) & 1 ))
+
+#define SHUFFLE_D( x, y, z, w )		(( (x) & 3 ) << 6 | ( (y) & 3 ) << 4 | ( (z) & 3 ) << 2 | ( (w) & 3 ))
+#define R_SHUFFLE_D( x, y, z, w )	(( (w) & 3 ) << 6 | ( (z) & 3 ) << 4 | ( (y) & 3 ) << 2 | ( (x) & 3 ))
+
+/*
+============
+idSIMD_SSE::MultiplyJoints
+============
+*/
+void VPCALL idSIMD_SSE::MultiplyJoints( idJointMat *result, const idJointMat *joints1, const idJointMat *joints2, const int numJoints ) {
+#if 1
+
+	assert_16_byte_aligned( result );
+	assert_16_byte_aligned( joints1 );
+	assert_16_byte_aligned( joints2 );
+
+	__asm {
+
+		mov			eax, numJoints
+		test		eax, eax
+		jz			done
+		mov			ecx, joints1
+		mov			edx, joints2
+		mov			edi, result
+		imul		eax, JOINTMAT_SIZE
+		add			ecx, eax
+		add			edx, eax
+		add			edi, eax
+		neg			eax
+
+	loopJoint:
+
+		movaps		xmm0, [edx+eax+0]
+		movaps		xmm1, [edx+eax+16]
+		movaps		xmm2, [edx+eax+32]
+
+		movss		xmm3, [ecx+eax+0]
+		shufps		xmm3, xmm3, R_SHUFFLE_PS( 0, 0, 0, 0 )
+		mulps		xmm3, xmm0
+		movss		xmm4, [ecx+eax+4]
+		shufps		xmm4, xmm4, R_SHUFFLE_PS( 0, 0, 0, 0 )
+		mulps		xmm4, xmm1
+		addps		xmm3, xmm4
+		movss		xmm5, [ecx+eax+8]
+		shufps		xmm5, xmm5, R_SHUFFLE_PS( 0, 0, 0, 0 )
+		mulps		xmm5, xmm2
+		addps		xmm3, xmm5
+		movss		xmm6, [ecx+eax+12]
+		shufps		xmm6, xmm6, R_SHUFFLE_PS( 1, 2, 3, 0 )
+		addps		xmm3, xmm6
+
+		movaps		[edi+eax+0], xmm3
+
+		movss		xmm7, [ecx+eax+16]
+		shufps		xmm7, xmm7, R_SHUFFLE_PS( 0, 0, 0, 0 )
+		mulps		xmm7, xmm0
+		movss		xmm4, [ecx+eax+20]
+		shufps		xmm4, xmm4, R_SHUFFLE_PS( 0, 0, 0, 0 )
+		mulps		xmm4, xmm1
+		addps		xmm7, xmm4
+		movss		xmm5, [ecx+eax+24]
+		shufps		xmm5, xmm5, R_SHUFFLE_PS( 0, 0, 0, 0 )
+		mulps		xmm5, xmm2
+		addps		xmm7, xmm5
+		movss		xmm6, [ecx+eax+28]
+		shufps		xmm6, xmm6, R_SHUFFLE_PS( 1, 2, 3, 0 )
+		addps		xmm7, xmm6
+
+		movaps		[edi+eax+16], xmm7
+
+		movss		xmm3, [ecx+eax+32]
+		shufps		xmm3, xmm3, R_SHUFFLE_PS( 0, 0, 0, 0 )
+		mulps		xmm3, xmm0
+		movss		xmm4, [ecx+eax+36]
+		shufps		xmm4, xmm4, R_SHUFFLE_PS( 0, 0, 0, 0 )
+		mulps		xmm4, xmm1
+		addps		xmm3, xmm4
+		movss		xmm5, [ecx+eax+40]
+		shufps		xmm5, xmm5, R_SHUFFLE_PS( 0, 0, 0, 0 )
+		mulps		xmm5, xmm2
+		addps		xmm3, xmm5
+		movss		xmm6, [ecx+eax+44]
+		shufps		xmm6, xmm6, R_SHUFFLE_PS( 1, 2, 3, 0 )
+		addps		xmm3, xmm6
+
+		movaps		[edi+eax+32], xmm3
+
+		add			eax, JOINTMAT_SIZE
+		jl			loopJoint
+	done:
+	}
+
+#else
+
+	int i;
+
+	for ( i = 0; i < numJoints; i++ ) {
+		idJointMat::Multiply( result[i], joints1[i], joints2[i] );
+	}
+
+#endif
+}
+
+/*
+============
+idSIMD_SSE::TransformVertsNew
+============
+*/
+void VPCALL idSIMD_SSE::TransformVertsNew( idDrawVert *verts, const int numVerts, idBounds &bounds, const idJointMat *joints, const idVec4 *base, const jointWeight_t *weights, const int numWeights ) {
+	ALIGN16( float tmpMin[4] );
+	ALIGN16( float tmpMax[4] );
+
+	assert_16_byte_aligned( joints );
+	assert_16_byte_aligned( base );
+
+	__asm {
+		push		ebx
+		mov			eax, numVerts
+		test		eax, eax
+		jz			done
+		imul		eax, DRAWVERT_SIZE
+
+		mov			ecx, verts
+		mov			edx, weights
+		mov			esi, base
+		mov			edi, joints
+
+		add			ecx, eax
+		neg			eax
+
+		movaps		xmm6, SIMD_SP_infinity
+		movaps		xmm7, SIMD_SP_negInfinity
+		movaps		tmpMin, xmm6
+		movaps		tmpMax, xmm7
+
+	loopVert:
+		mov			ebx, dword ptr [edx+JOINTWEIGHT_JOINTMATOFFSET_OFFSET]
+		movaps		xmm2, [esi]
+		add			edx, JOINTWEIGHT_SIZE
+		movaps		xmm0, xmm2
+		add			esi, BASEVECTOR_SIZE
+		movaps		xmm1, xmm2
+
+		mulps		xmm0, [edi+ebx+ 0]						// xmm0 = m0, m1, m2, t0
+		mulps		xmm1, [edi+ebx+16]						// xmm1 = m3, m4, m5, t1
+		mulps		xmm2, [edi+ebx+32]						// xmm2 = m6, m7, m8, t2
+
+		cmp			dword ptr [edx-JOINTWEIGHT_SIZE+JOINTWEIGHT_NEXTVERTEXOFFSET_OFFSET], JOINTWEIGHT_SIZE
+
+		je			doneWeight
+
+	loopWeight:
+		mov			ebx, dword ptr [edx+JOINTWEIGHT_JOINTMATOFFSET_OFFSET]
+		movaps		xmm5, [esi]
+		add			edx, JOINTWEIGHT_SIZE
+		movaps		xmm3, xmm5
+		add			esi, BASEVECTOR_SIZE
+		movaps		xmm4, xmm5
+
+		mulps		xmm3, [edi+ebx+ 0]						// xmm3 = m0, m1, m2, t0
+		mulps		xmm4, [edi+ebx+16]						// xmm4 = m3, m4, m5, t1
+		mulps		xmm5, [edi+ebx+32]						// xmm5 = m6, m7, m8, t2
+
+		cmp			dword ptr [edx-JOINTWEIGHT_SIZE+JOINTWEIGHT_NEXTVERTEXOFFSET_OFFSET], JOINTWEIGHT_SIZE
+
+		addps		xmm0, xmm3
+		addps		xmm1, xmm4
+		addps		xmm2, xmm5
+
+		jne			loopWeight
+
+	doneWeight:
+		add			eax, DRAWVERT_SIZE
+
+		movaps		xmm6, xmm0								// xmm6 =    m0,    m1,          m2,          t0
+		unpcklps	xmm6, xmm1								// xmm6 =    m0,    m3,          m1,          m4
+		unpckhps	xmm0, xmm1								// xmm1 =    m2,    m5,          t0,          t1
+		addps		xmm6, xmm0								// xmm6 = m0+m2, m3+m5,       m1+t0,       m4+t1
+
+		movaps		xmm7, xmm2								// xmm7 =    m6,    m7,          m8,          t2
+		movlhps		xmm2, xmm6								// xmm2 =    m6,    m7,       m0+m2,       m3+m5
+		movhlps		xmm6, xmm7								// xmm6 =    m8,    t2,       m1+t0,       m4+t1
+		addps		xmm6, xmm2								// xmm6 = m6+m8, m7+t2, m0+m1+m2+t0, m3+m4+m5+t1
+
+		movhps		[ecx+eax-DRAWVERT_SIZE+DRAWVERT_XYZ_OFFSET+0], xmm6
+
+		movaps		xmm5, xmm6								// xmm5 = m6+m8, m7+t2
+		shufps		xmm5, xmm5, R_SHUFFLE_PS( 1, 0, 2, 3 )	// xmm5 = m7+t2, m6+m8
+		addss		xmm5, xmm6								// xmm5 = m6+m8+m7+t2
+		movss		xmm6, xmm5
+
+		movss		[ecx+eax-DRAWVERT_SIZE+DRAWVERT_XYZ_OFFSET+8], xmm5
+
+		movaps		xmm7, xmm6
+		minps		xmm7, tmpMin
+		maxps		xmm6, tmpMax
+		movaps		tmpMin, xmm7
+		movaps		tmpMax, xmm6
+
+		jl			loopVert
+
+	done:
+		pop			ebx
+		mov			esi, bounds
+		movaps		xmm6, tmpMin
+		movaps		xmm7, tmpMax
+		movhps		[esi+ 0], xmm6
+		movss		[esi+ 8], xmm6
+		movhps		[esi+12], xmm7
+		movss		[esi+20], xmm7
+	}
+}
+
+/*
+============
+idSIMD_SSE::TransformVertsAndTangents
+============
+*/
+void VPCALL idSIMD_SSE::TransformVertsAndTangents( idDrawVert *verts, const int numVerts, idBounds &bounds, const idJointMat *joints, const idVec4 *base, const jointWeight_t *weights, const int numWeights ) {
+	ALIGN16( float tmpMin[4] );
+	ALIGN16( float tmpMax[4] );
+
+	assert_16_byte_aligned( joints );
+	assert_16_byte_aligned( base );
+
+	__asm {
+		push		ebx
+		mov			eax, numVerts
+		test		eax, eax
+		jz			done
+		imul		eax, DRAWVERT_SIZE
+
+		mov			ecx, verts
+		mov			edx, weights
+		mov			esi, base
+		mov			edi, joints
+
+		add			ecx, eax
+		neg			eax
+
+		movaps		xmm6, SIMD_SP_infinity
+		movaps		xmm7, SIMD_SP_negInfinity
+		movaps		tmpMin, xmm6
+		movaps		tmpMax, xmm7
+
+	loopVert:
+		movss		xmm2, [edx+JOINTWEIGHT_WEIGHT_OFFSET]
+		mov			ebx, dword ptr [edx+JOINTWEIGHT_JOINTMATOFFSET_OFFSET]
+		shufps		xmm2, xmm2, R_SHUFFLE_PS( 0, 0, 0, 0 )
+		add			edx, JOINTWEIGHT_SIZE
+		movaps		xmm0, xmm2
+		movaps		xmm1, xmm2
+
+		mulps		xmm0, [edi+ebx+ 0]						// xmm0 = m0, m1, m2, t0
+		mulps		xmm1, [edi+ebx+16]						// xmm1 = m3, m4, m5, t1
+		mulps		xmm2, [edi+ebx+32]						// xmm2 = m6, m7, m8, t2
+
+		cmp			dword ptr [edx-JOINTWEIGHT_SIZE+JOINTWEIGHT_NEXTVERTEXOFFSET_OFFSET], JOINTWEIGHT_SIZE
+
+		je			doneWeight
+
+	loopWeight:
+		movss		xmm5, [edx+JOINTWEIGHT_WEIGHT_OFFSET]
+		mov			ebx, dword ptr [edx+JOINTWEIGHT_JOINTMATOFFSET_OFFSET]
+		shufps		xmm5, xmm5, R_SHUFFLE_PS( 0, 0, 0, 0 )
+		add			edx, JOINTWEIGHT_SIZE
+		movaps		xmm3, xmm5
+		movaps		xmm4, xmm5
+
+		mulps		xmm3, [edi+ebx+ 0]						// xmm3 = m0, m1, m2, t0
+		mulps		xmm4, [edi+ebx+16]						// xmm4 = m3, m4, m5, t1
+		mulps		xmm5, [edi+ebx+32]						// xmm5 = m6, m7, m8, t2
+
+		cmp			dword ptr [edx-JOINTWEIGHT_SIZE+JOINTWEIGHT_NEXTVERTEXOFFSET_OFFSET], JOINTWEIGHT_SIZE
+
+		addps		xmm0, xmm3
+		addps		xmm1, xmm4
+		addps		xmm2, xmm5
+
+		jne			loopWeight
+
+	doneWeight:
+		add			esi, 4*BASEVECTOR_SIZE
+		add			eax, DRAWVERT_SIZE
+
+		// transform vertex
+		movaps		xmm3, [esi-4*BASEVECTOR_SIZE]
+		movaps		xmm4, xmm3
+		movaps		xmm5, xmm3
+
+		mulps		xmm3, xmm0
+		mulps		xmm4, xmm1
+		mulps		xmm5, xmm2
+
+		movaps		xmm6, xmm3								// xmm6 =    m0,    m1,          m2,          t0
+		unpcklps	xmm6, xmm4								// xmm6 =    m0,    m3,          m1,          m4
+		unpckhps	xmm3, xmm4								// xmm4 =    m2,    m5,          t0,          t1
+		addps		xmm6, xmm3								// xmm6 = m0+m2, m3+m5,       m1+t0,       m4+t1
+
+		movaps		xmm7, xmm5								// xmm7 =    m6,    m7,          m8,          t2
+		movlhps		xmm5, xmm6								// xmm5 =    m6,    m7,       m0+m2,       m3+m5
+		movhlps		xmm6, xmm7								// xmm6 =    m8,    t2,       m1+t0,       m4+t1
+		addps		xmm6, xmm5								// xmm6 = m6+m8, m7+t2, m0+m1+m2+t0, m3+m4+m5+t1
+
+		movhps		[ecx+eax-DRAWVERT_SIZE+DRAWVERT_XYZ_OFFSET+0], xmm6
+
+		movaps		xmm7, xmm6								// xmm7 = m6+m8, m7+t2
+		shufps		xmm7, xmm7, R_SHUFFLE_PS( 1, 0, 2, 3 )	// xmm7 = m7+t2, m6+m8
+		addss		xmm7, xmm6								// xmm7 = m6+m8+m7+t2
+		movss		xmm6, xmm7
+
+		movss		[ecx+eax-DRAWVERT_SIZE+DRAWVERT_XYZ_OFFSET+8], xmm7
+
+		movaps		xmm5, xmm6
+		minps		xmm5, tmpMin
+		maxps		xmm6, tmpMax
+		movaps		tmpMin, xmm5
+		movaps		tmpMax, xmm6
+
+		// transform normal
+		movaps		xmm3, [esi-3*BASEVECTOR_SIZE]
+		movaps		xmm4, xmm3
+		movaps		xmm5, xmm3
+
+		mulps		xmm3, xmm0
+		mulps		xmm4, xmm1
+		mulps		xmm5, xmm2
+
+		movaps		xmm6, xmm3								// xmm6 =    m0,    m1,          m2,          t0
+		unpcklps	xmm6, xmm4								// xmm6 =    m0,    m3,          m1,          m4
+		unpckhps	xmm3, xmm4								// xmm4 =    m2,    m5,          t0,          t1
+		addps		xmm6, xmm3								// xmm6 = m0+m2, m3+m5,       m1+t0,       m4+t1
+
+		movaps		xmm7, xmm5								// xmm7 =    m6,    m7,          m8,          t2
+		movlhps		xmm5, xmm6								// xmm5 =    m6,    m7,       m0+m2,       m3+m5
+		movhlps		xmm6, xmm7								// xmm6 =    m8,    t2,       m1+t0,       m4+t1
+		addps		xmm6, xmm5								// xmm6 = m6+m8, m7+t2, m0+m1+m2+t0, m3+m4+m5+t1
+
+		movhps		[ecx+eax-DRAWVERT_SIZE+DRAWVERT_NORMAL_OFFSET+0], xmm6
+
+		movaps		xmm7, xmm6								// xmm7 = m6+m8, m7+t2
+		shufps		xmm7, xmm7, R_SHUFFLE_PS( 1, 0, 2, 3 )	// xmm7 = m7+t2, m6+m8
+		addss		xmm7, xmm6								// xmm7 = m6+m8+m7+t2
+
+		movss		[ecx+eax-DRAWVERT_SIZE+DRAWVERT_NORMAL_OFFSET+8], xmm7
+
+		// transform first tangent
+		movaps		xmm3, [esi-2*BASEVECTOR_SIZE]
+		movaps		xmm4, xmm3
+		movaps		xmm5, xmm3
+
+		mulps		xmm3, xmm0
+		mulps		xmm4, xmm1
+		mulps		xmm5, xmm2
+
+		movaps		xmm6, xmm3								// xmm6 =    m0,    m1,          m2,          t0
+		unpcklps	xmm6, xmm4								// xmm6 =    m0,    m3,          m1,          m4
+		unpckhps	xmm3, xmm4								// xmm4 =    m2,    m5,          t0,          t1
+		addps		xmm6, xmm3								// xmm6 = m0+m2, m3+m5,       m1+t0,       m4+t1
+
+		movaps		xmm7, xmm5								// xmm7 =    m6,    m7,          m8,          t2
+		movlhps		xmm5, xmm6								// xmm5 =    m6,    m7,       m0+m2,       m3+m5
+		movhlps		xmm6, xmm7								// xmm6 =    m8,    t2,       m1+t0,       m4+t1
+		addps		xmm6, xmm5								// xmm6 = m6+m8, m7+t2, m0+m1+m2+t0, m3+m4+m5+t1
+
+		movhps		[ecx+eax-DRAWVERT_SIZE+DRAWVERT_TANGENT0_OFFSET+0], xmm6
+
+		movaps		xmm7, xmm6								// xmm7 = m6+m8, m7+t2
+		shufps		xmm7, xmm7, R_SHUFFLE_PS( 1, 0, 2, 3 )	// xmm7 = m7+t2, m6+m8
+		addss		xmm7, xmm6								// xmm7 = m6+m8+m7+t2
+
+		movss		[ecx+eax-DRAWVERT_SIZE+DRAWVERT_TANGENT0_OFFSET+8], xmm7
+
+		// transform second tangent
+		movaps		xmm3, [esi-1*BASEVECTOR_SIZE]
+
+		mulps		xmm0, xmm3
+		mulps		xmm1, xmm3
+		mulps		xmm2, xmm3
+
+		movaps		xmm6, xmm0								// xmm6 =    m0,    m1,          m2,          t0
+		unpcklps	xmm6, xmm1								// xmm6 =    m0,    m3,          m1,          m4
+		unpckhps	xmm0, xmm1								// xmm1 =    m2,    m5,          t0,          t1
+		addps		xmm6, xmm0								// xmm6 = m0+m2, m3+m5,       m1+t0,       m4+t1
+
+		movaps		xmm7, xmm2								// xmm7 =    m6,    m7,          m8,          t2
+		movlhps		xmm2, xmm6								// xmm2 =    m6,    m7,       m0+m2,       m3+m5
+		movhlps		xmm6, xmm7								// xmm6 =    m8,    t2,       m1+t0,       m4+t1
+		addps		xmm6, xmm2								// xmm6 = m6+m8, m7+t2, m0+m1+m2+t0, m3+m4+m5+t1
+
+		movhps		[ecx+eax-DRAWVERT_SIZE+DRAWVERT_TANGENT1_OFFSET+0], xmm6
+
+		movaps		xmm7, xmm6
+		shufps		xmm7, xmm7, R_SHUFFLE_D( 1, 0, 2, 3 )	// xmm7 = m7+t2, m6+m8
+		addss		xmm7, xmm6								// xmm7 = m6+m8+m7+t2
+
+		movss		[ecx+eax-DRAWVERT_SIZE+DRAWVERT_TANGENT1_OFFSET+8], xmm7
+
+		jl			loopVert
+
+	done:
+		pop			ebx
+		mov			esi, bounds
+		movaps		xmm6, tmpMin
+		movaps		xmm7, tmpMax
+		movhps		[esi+ 0], xmm6
+		movss		[esi+ 8], xmm6
+		movhps		[esi+12], xmm7
+		movss		[esi+20], xmm7
+	}
+}
+
+/*
+============
+idSIMD_SSE::TransformVertsAndTangentsFast
+============
+*/
+void VPCALL idSIMD_SSE::TransformVertsAndTangentsFast( idDrawVert *verts, const int numVerts, idBounds &bounds, const idJointMat *joints, const idVec4 *base, const jointWeight_t *weights, const int numWeights ) {
+	ALIGN16( float tmpMin[4] );
+	ALIGN16( float tmpMax[4] );
+
+	assert_16_byte_aligned( joints );
+	assert_16_byte_aligned( base );
+
+	__asm {
+		push		ebx
+		mov			eax, numVerts
+		test		eax, eax
+		jz			done
+		imul		eax, DRAWVERT_SIZE
+
+		mov			ecx, verts
+		mov			edx, weights
+		mov			esi, base
+		mov			edi, joints
+
+		add			ecx, eax
+		neg			eax
+
+		movaps		xmm6, SIMD_SP_infinity
+		movaps		xmm7, SIMD_SP_negInfinity
+		movaps		tmpMin, xmm6
+		movaps		tmpMax, xmm7
+
+	loopVert:
+		mov			ebx, dword ptr [edx+JOINTWEIGHT_JOINTMATOFFSET_OFFSET]
+
+		add			esi, 4*BASEVECTOR_SIZE
+
+		movaps		xmm0, [edi+ebx+ 0]						// xmm0 = m0, m1, m2, t0
+		movaps		xmm1, [edi+ebx+16]						// xmm1 = m3, m4, m5, t1
+		movaps		xmm2, [edi+ebx+32]						// xmm2 = m6, m7, m8, t2
+
+		add			edx, dword ptr [edx+JOINTWEIGHT_NEXTVERTEXOFFSET_OFFSET]
+
+		add			eax, DRAWVERT_SIZE
+
+		// transform vertex
+		movaps		xmm3, [esi-4*BASEVECTOR_SIZE]
+		movaps		xmm4, xmm3
+		movaps		xmm5, xmm3
+
+		mulps		xmm3, xmm0
+		mulps		xmm4, xmm1
+		mulps		xmm5, xmm2
+
+		movaps		xmm6, xmm3								// xmm6 =    m0,    m1,          m2,          t0
+		unpcklps	xmm6, xmm4								// xmm6 =    m0,    m3,          m1,          m4
+		unpckhps	xmm3, xmm4								// xmm4 =    m2,    m5,          t0,          t1
+		addps		xmm6, xmm3								// xmm6 = m0+m2, m3+m5,       m1+t0,       m4+t1
+
+		movaps		xmm7, xmm5								// xmm7 =    m6,    m7,          m8,          t2
+		movlhps		xmm5, xmm6								// xmm5 =    m6,    m7,       m0+m2,       m3+m5
+		movhlps		xmm6, xmm7								// xmm6 =    m8,    t2,       m1+t0,       m4+t1
+		addps		xmm6, xmm5								// xmm6 = m6+m8, m7+t2, m0+m1+m2+t0, m3+m4+m5+t1
+
+		movhps		[ecx+eax-DRAWVERT_SIZE+DRAWVERT_XYZ_OFFSET+0], xmm6
+
+		movaps		xmm7, xmm6								// xmm7 = m6+m8, m7+t2
+		shufps		xmm7, xmm7, R_SHUFFLE_PS( 1, 0, 2, 3 )	// xmm7 = m7+t2, m6+m8
+		addss		xmm7, xmm6								// xmm7 = m6+m8+m7+t2
+		movss		xmm6, xmm7
+
+		movss		[ecx+eax-DRAWVERT_SIZE+DRAWVERT_XYZ_OFFSET+8], xmm7
+
+		movaps		xmm5, xmm6
+		minps		xmm5, tmpMin
+		maxps		xmm6, tmpMax
+		movaps		tmpMin, xmm5
+		movaps		tmpMax, xmm6
+
+		// transform normal
+		movaps		xmm3, [esi-3*BASEVECTOR_SIZE]
+		movaps		xmm4, xmm3
+		movaps		xmm5, xmm3
+
+		mulps		xmm3, xmm0
+		mulps		xmm4, xmm1
+		mulps		xmm5, xmm2
+
+		movaps		xmm6, xmm3								// xmm6 =    m0,    m1,          m2,          t0
+		unpcklps	xmm6, xmm4								// xmm6 =    m0,    m3,          m1,          m4
+		unpckhps	xmm3, xmm4								// xmm4 =    m2,    m5,          t0,          t1
+		addps		xmm6, xmm3								// xmm6 = m0+m2, m3+m5,       m1+t0,       m4+t1
+
+		movaps		xmm7, xmm5								// xmm7 =    m6,    m7,          m8,          t2
+		movlhps		xmm5, xmm6								// xmm5 =    m6,    m7,       m0+m2,       m3+m5
+		movhlps		xmm6, xmm7								// xmm6 =    m8,    t2,       m1+t0,       m4+t1
+		addps		xmm6, xmm5								// xmm6 = m6+m8, m7+t2, m0+m1+m2+t0, m3+m4+m5+t1
+
+		movhps		[ecx+eax-DRAWVERT_SIZE+DRAWVERT_NORMAL_OFFSET+0], xmm6
+
+		movaps		xmm7, xmm6								// xmm7 = m6+m8, m7+t2
+		shufps		xmm7, xmm7, R_SHUFFLE_PS( 1, 0, 2, 3 )	// xmm7 = m7+t2, m6+m8
+		addss		xmm7, xmm6								// xmm7 = m6+m8+m7+t2
+
+		movss		[ecx+eax-DRAWVERT_SIZE+DRAWVERT_NORMAL_OFFSET+8], xmm7
+
+		// transform first tangent
+		movaps		xmm3, [esi-2*BASEVECTOR_SIZE]
+		movaps		xmm4, xmm3
+		movaps		xmm5, xmm3
+
+		mulps		xmm3, xmm0
+		mulps		xmm4, xmm1
+		mulps		xmm5, xmm2
+
+		movaps		xmm6, xmm3								// xmm6 =    m0,    m1,          m2,          t0
+		unpcklps	xmm6, xmm4								// xmm6 =    m0,    m3,          m1,          m4
+		unpckhps	xmm3, xmm4								// xmm4 =    m2,    m5,          t0,          t1
+		addps		xmm6, xmm3								// xmm6 = m0+m2, m3+m5,       m1+t0,       m4+t1
+
+		movaps		xmm7, xmm5								// xmm7 =    m6,    m7,          m8,          t2
+		movlhps		xmm5, xmm6								// xmm5 =    m6,    m7,       m0+m2,       m3+m5
+		movhlps		xmm6, xmm7								// xmm6 =    m8,    t2,       m1+t0,       m4+t1
+		addps		xmm6, xmm5								// xmm6 = m6+m8, m7+t2, m0+m1+m2+t0, m3+m4+m5+t1
+
+		movhps		[ecx+eax-DRAWVERT_SIZE+DRAWVERT_TANGENT0_OFFSET+0], xmm6
+
+		movaps		xmm7, xmm6								// xmm7 = m6+m8, m7+t2
+		shufps		xmm7, xmm7, R_SHUFFLE_PS( 1, 0, 2, 3 )	// xmm7 = m7+t2, m6+m8
+		addss		xmm7, xmm6								// xmm7 = m6+m8+m7+t2
+
+		movss		[ecx+eax-DRAWVERT_SIZE+DRAWVERT_TANGENT0_OFFSET+8], xmm7
+
+		// transform second tangent
+		movaps		xmm3, [esi-1*BASEVECTOR_SIZE]
+
+		mulps		xmm0, xmm3
+		mulps		xmm1, xmm3
+		mulps		xmm2, xmm3
+
+		movaps		xmm6, xmm0								// xmm6 =    m0,    m1,          m2,          t0
+		unpcklps	xmm6, xmm1								// xmm6 =    m0,    m3,          m1,          m4
+		unpckhps	xmm0, xmm1								// xmm1 =    m2,    m5,          t0,          t1
+		addps		xmm6, xmm0								// xmm6 = m0+m2, m3+m5,       m1+t0,       m4+t1
+
+		movaps		xmm7, xmm2								// xmm7 =    m6,    m7,          m8,          t2
+		movlhps		xmm2, xmm6								// xmm2 =    m6,    m7,       m0+m2,       m3+m5
+		movhlps		xmm6, xmm7								// xmm6 =    m8,    t2,       m1+t0,       m4+t1
+		addps		xmm6, xmm2								// xmm6 = m6+m8, m7+t2, m0+m1+m2+t0, m3+m4+m5+t1
+
+		movhps		[ecx+eax-DRAWVERT_SIZE+DRAWVERT_TANGENT1_OFFSET+0], xmm6
+
+		movaps		xmm7, xmm6
+		shufps		xmm7, xmm7, R_SHUFFLE_D( 1, 0, 2, 3 )	// xmm7 = m7+t2, m6+m8
+		addss		xmm7, xmm6								// xmm7 = m6+m8+m7+t2
+
+		movss		[ecx+eax-DRAWVERT_SIZE+DRAWVERT_TANGENT1_OFFSET+8], xmm7
+
+		jl			loopVert
+
+	done:
+		pop			ebx
+		mov			esi, bounds
+		movaps		xmm6, tmpMin
+		movaps		xmm7, tmpMax
+		movhps		[esi+ 0], xmm6
+		movss		[esi+ 8], xmm6
+		movhps		[esi+12], xmm7
+		movss		[esi+20], xmm7
+	}
+}
+#endif
 
 /*
 ============
@@ -12713,14 +12776,14 @@ idSIMD_SSE::DecalPointCull
 void VPCALL idSIMD_SSE::DecalPointCull( byte *cullBits, const idPlane *planes, const idDrawVert *verts, const int numVerts ) {
 #if 1
 
-	ALIGN16( float p0[4] );
-	ALIGN16( float p1[4] );
-	ALIGN16( float p2[4] );
-	ALIGN16( float p3[4] );
-	ALIGN16( float p4[4] );
-	ALIGN16( float p5[4] );
-	ALIGN16( float p6[4] );
-	ALIGN16( float p7[4] );
+	ALIGN16( float p0[4]; )
+	ALIGN16( float p1[4]; )
+	ALIGN16( float p2[4]; )
+	ALIGN16( float p3[4]; )
+	ALIGN16( float p4[4]; )
+	ALIGN16( float p5[4]; )
+	ALIGN16( float p6[4]; )
+	ALIGN16( float p7[4]; )
 
 	assert( sizeof( idDrawVert ) == DRAWVERT_SIZE );
 	assert( (int)&((idDrawVert *)0)->xyz == DRAWVERT_XYZ_OFFSET );
@@ -13486,15 +13549,15 @@ void VPCALL idSIMD_SSE::DeriveTriPlanes( idPlane *planes, const idDrawVert *vert
 	int i, j;
 
 	for ( i = 0; i <= numIndexes - 12; i += 12 ) {
-		ALIGN16( float d0[4] );
-		ALIGN16( float d1[4] );
-		ALIGN16( float d2[4] );
-		ALIGN16( float d3[4] );
-		ALIGN16( float d4[4] );
-		ALIGN16( float d5[4] );
-		ALIGN16( float n0[4] );
-		ALIGN16( float n1[4] );
-		ALIGN16( float n2[4] );
+		ALIGN16( float d0[4]; )
+		ALIGN16( float d1[4]; )
+		ALIGN16( float d2[4]; )
+		ALIGN16( float d3[4]; )
+		ALIGN16( float d4[4]; )
+		ALIGN16( float d5[4]; )
+		ALIGN16( float n0[4]; )
+		ALIGN16( float n1[4]; )
+		ALIGN16( float n2[4]; )
 
 		for ( j = 0; j < 4; j++ ) {
 			const idDrawVert *a, *b, *c;
@@ -13512,7 +13575,7 @@ void VPCALL idSIMD_SSE::DeriveTriPlanes( idPlane *planes, const idDrawVert *vert
 			d5[j] = c->xyz[2] - a->xyz[2];
 		}
 
-		ALIGN16( float tmp[4] );
+		ALIGN16( float tmp[4]; )
 
 		n0[0] = d4[0] * d2[0];
 		n0[1] = d4[1] * d2[1];
@@ -13664,26 +13727,26 @@ void VPCALL idSIMD_SSE::DeriveTangents( idPlane *planes, idDrawVert *verts, cons
 
 	for ( i = 0; i <= numIndexes - 12; i += 12 ) {
 		idDrawVert *a, *b, *c;
-		ALIGN16( unsigned long signBit[4] );
-		ALIGN16( float d0[4] );
-		ALIGN16( float d1[4] );
-		ALIGN16( float d2[4] );
-		ALIGN16( float d3[4] );
-		ALIGN16( float d4[4] );
-		ALIGN16( float d5[4] );
-		ALIGN16( float d6[4] );
-		ALIGN16( float d7[4] );
-		ALIGN16( float d8[4] );
-		ALIGN16( float d9[4] );
-		ALIGN16( float n0[4] );
-		ALIGN16( float n1[4] );
-		ALIGN16( float n2[4] );
-		ALIGN16( float t0[4] );
-		ALIGN16( float t1[4] );
-		ALIGN16( float t2[4] );
-		ALIGN16( float t3[4] );
-		ALIGN16( float t4[4] );
-		ALIGN16( float t5[4] );
+		ALIGN16( unsigned long signBit[4]; )
+		ALIGN16( float d0[4]; )
+		ALIGN16( float d1[4]; )
+		ALIGN16( float d2[4]; )
+		ALIGN16( float d3[4]; )
+		ALIGN16( float d4[4]; )
+		ALIGN16( float d5[4]; )
+		ALIGN16( float d6[4]; )
+		ALIGN16( float d7[4]; )
+		ALIGN16( float d8[4]; )
+		ALIGN16( float d9[4]; )
+		ALIGN16( float n0[4]; )
+		ALIGN16( float n1[4]; )
+		ALIGN16( float n2[4]; )
+		ALIGN16( float t0[4]; )
+		ALIGN16( float t1[4]; )
+		ALIGN16( float t2[4]; )
+		ALIGN16( float t3[4]; )
+		ALIGN16( float t4[4]; )
+		ALIGN16( float t5[4]; )
 
 		for ( int j = 0; j < 4; j++ ) {
 
@@ -13888,7 +13951,7 @@ void VPCALL idSIMD_SSE::DeriveTangents( idPlane *planes, idDrawVert *verts, cons
 
 #else
 
-		ALIGN16( float tmp[4] );
+		ALIGN16( float tmp[4]; )
 
 		// normal
 		n0[0] = d6[0] * d2[0];
@@ -14220,7 +14283,7 @@ void VPCALL idSIMD_SSE::DeriveTangents( idPlane *planes, idDrawVert *verts, cons
 
 	for ( ; i < numIndexes; i += 3 ) {
 		idDrawVert *a, *b, *c;
-		ALIGN16( unsigned long signBit[4] );
+		ALIGN16( unsigned long signBit[4]; )
 		float d0, d1, d2, d3, d4;
 		float d5, d6, d7, d8, d9;
 		float n0, n1, n2;
@@ -14577,28 +14640,28 @@ void VPCALL idSIMD_SSE::DeriveUnsmoothedTangents( idDrawVert *verts, const domin
 	int i, j;
 
 	for ( i = 0; i <= numVerts - 4; i += 4 ) {
-		ALIGN16( float s0[4] );
-		ALIGN16( float s1[4] );
-		ALIGN16( float s2[4] );
-		ALIGN16( float d0[4] );
-		ALIGN16( float d1[4] );
-		ALIGN16( float d2[4] );
-		ALIGN16( float d3[4] );
-		ALIGN16( float d4[4] );
-		ALIGN16( float d5[4] );
-		ALIGN16( float d6[4] );
-		ALIGN16( float d7[4] );
-		ALIGN16( float d8[4] );
-		ALIGN16( float d9[4] );
-		ALIGN16( float n0[4] );
-		ALIGN16( float n1[4] );
-		ALIGN16( float n2[4] );
-		ALIGN16( float t0[4] );
-		ALIGN16( float t1[4] );
-		ALIGN16( float t2[4] );
-		ALIGN16( float t3[4] );
-		ALIGN16( float t4[4] );
-		ALIGN16( float t5[4] );
+		ALIGN16( float s0[4]; )
+		ALIGN16( float s1[4]; )
+		ALIGN16( float s2[4]; )
+		ALIGN16( float d0[4]; )
+		ALIGN16( float d1[4]; )
+		ALIGN16( float d2[4]; )
+		ALIGN16( float d3[4]; )
+		ALIGN16( float d4[4]; )
+		ALIGN16( float d5[4]; )
+		ALIGN16( float d6[4]; )
+		ALIGN16( float d7[4]; )
+		ALIGN16( float d8[4]; )
+		ALIGN16( float d9[4]; )
+		ALIGN16( float n0[4]; )
+		ALIGN16( float n1[4]; )
+		ALIGN16( float n2[4]; )
+		ALIGN16( float t0[4]; )
+		ALIGN16( float t1[4]; )
+		ALIGN16( float t2[4]; )
+		ALIGN16( float t3[4]; )
+		ALIGN16( float t4[4]; )
+		ALIGN16( float t5[4]; )
 
 		for ( j = 0; j < 4; j++ ) {
 			const idDrawVert *a, *b, *c;
@@ -15653,19 +15716,19 @@ void VPCALL idSIMD_SSE::CreateTextureSpaceLightVectors( idVec3 *lightVectors, co
 
 #elif 1
 
-	ALIGN16( int usedVertNums[4] );
-	ALIGN16( float lightDir0[4] );
-	ALIGN16( float lightDir1[4] );
-	ALIGN16( float lightDir2[4] );
-	ALIGN16( float normal0[4] );
-	ALIGN16( float normal1[4] );
-	ALIGN16( float normal2[4] );
-	ALIGN16( float tangent0[4] );
-	ALIGN16( float tangent1[4] );
-	ALIGN16( float tangent2[4] );
-	ALIGN16( float tangent3[4] );
-	ALIGN16( float tangent4[4] );
-	ALIGN16( float tangent5[4] );
+	ALIGN16( int usedVertNums[4]; )
+	ALIGN16( float lightDir0[4]; )
+	ALIGN16( float lightDir1[4]; )
+	ALIGN16( float lightDir2[4]; )
+	ALIGN16( float normal0[4]; )
+	ALIGN16( float normal1[4]; )
+	ALIGN16( float normal2[4]; )
+	ALIGN16( float tangent0[4]; )
+	ALIGN16( float tangent1[4]; )
+	ALIGN16( float tangent2[4]; )
+	ALIGN16( float tangent3[4]; )
+	ALIGN16( float tangent4[4]; )
+	ALIGN16( float tangent5[4]; )
 	idVec3 localLightOrigin = lightOrigin;
 
 	__asm {
@@ -15863,9 +15926,9 @@ void VPCALL idSIMD_SSE::CreateTextureSpaceLightVectors( idVec3 *lightVectors, co
 
 #else
 
-	ALIGN16( float lightVectors0[4] );
-	ALIGN16( float lightVectors1[4] );
-	ALIGN16( float lightVectors2[4] );
+	ALIGN16( float lightVectors0[4]; )
+	ALIGN16( float lightVectors1[4]; )
+	ALIGN16( float lightVectors2[4]; )
 	int numUsedVerts = 0;
 
 	for ( int i = 0; i < numVerts; i++ ) {
@@ -16124,22 +16187,22 @@ void VPCALL idSIMD_SSE::CreateSpecularTextureCoords( idVec4 *texCoords, const id
 
 #elif 1
 
-	ALIGN16( int usedVertNums[4] );
-	ALIGN16( float lightDir0[4] );
-	ALIGN16( float lightDir1[4] );
-	ALIGN16( float lightDir2[4] );
-	ALIGN16( float viewDir0[4] );
-	ALIGN16( float viewDir1[4] );
-	ALIGN16( float viewDir2[4] );
-	ALIGN16( float normal0[4] );
-	ALIGN16( float normal1[4] );
-	ALIGN16( float normal2[4] );
-	ALIGN16( float tangent0[4] );
-	ALIGN16( float tangent1[4] );
-	ALIGN16( float tangent2[4] );
-	ALIGN16( float tangent3[4] );
-	ALIGN16( float tangent4[4] );
-	ALIGN16( float tangent5[4] );
+	ALIGN16( int usedVertNums[4]; )
+	ALIGN16( float lightDir0[4]; )
+	ALIGN16( float lightDir1[4]; )
+	ALIGN16( float lightDir2[4]; )
+	ALIGN16( float viewDir0[4]; )
+	ALIGN16( float viewDir1[4]; )
+	ALIGN16( float viewDir2[4]; )
+	ALIGN16( float normal0[4]; )
+	ALIGN16( float normal1[4]; )
+	ALIGN16( float normal2[4]; )
+	ALIGN16( float tangent0[4]; )
+	ALIGN16( float tangent1[4]; )
+	ALIGN16( float tangent2[4]; )
+	ALIGN16( float tangent3[4]; )
+	ALIGN16( float tangent4[4]; )
+	ALIGN16( float tangent5[4]; )
 	idVec3 localLightOrigin = lightOrigin;
 	idVec3 localViewOrigin = viewOrigin;
 
@@ -16418,25 +16481,25 @@ void VPCALL idSIMD_SSE::CreateSpecularTextureCoords( idVec4 *texCoords, const id
 
 #else
 
-	ALIGN16( int usedVertNums[4] );
-	ALIGN16( float lightDir0[4] );
-	ALIGN16( float lightDir1[4] );
-	ALIGN16( float lightDir2[4] );
-	ALIGN16( float viewDir0[4] );
-	ALIGN16( float viewDir1[4] );
-	ALIGN16( float viewDir2[4] );
-	ALIGN16( float normal0[4] );
-	ALIGN16( float normal1[4] );
-	ALIGN16( float normal2[4] );
-	ALIGN16( float tangent0[4] );
-	ALIGN16( float tangent1[4] );
-	ALIGN16( float tangent2[4] );
-	ALIGN16( float tangent3[4] );
-	ALIGN16( float tangent4[4] );
-	ALIGN16( float tangent5[4] );
-	ALIGN16( float texCoords0[4] );
-	ALIGN16( float texCoords1[4] );
-	ALIGN16( float texCoords2[4] );
+	ALIGN16( int usedVertNums[4]; )
+	ALIGN16( float lightDir0[4]; )
+	ALIGN16( float lightDir1[4]; )
+	ALIGN16( float lightDir2[4]; )
+	ALIGN16( float viewDir0[4]; )
+	ALIGN16( float viewDir1[4]; )
+	ALIGN16( float viewDir2[4]; )
+	ALIGN16( float normal0[4]; )
+	ALIGN16( float normal1[4]; )
+	ALIGN16( float normal2[4]; )
+	ALIGN16( float tangent0[4]; )
+	ALIGN16( float tangent1[4]; )
+	ALIGN16( float tangent2[4]; )
+	ALIGN16( float tangent3[4]; )
+	ALIGN16( float tangent4[4]; )
+	ALIGN16( float tangent5[4]; )
+	ALIGN16( float texCoords0[4]; )
+	ALIGN16( float texCoords1[4]; )
+	ALIGN16( float texCoords2[4]; )
 	idVec3 localLightOrigin = lightOrigin;
 	idVec3 localViewOrigin = viewOrigin;
 	int numUsedVerts = 0;
@@ -16473,7 +16536,7 @@ void VPCALL idSIMD_SSE::CreateSpecularTextureCoords( idVec4 *texCoords, const id
 			continue;
 		}
 
-		ALIGN16( float temp[4] );
+		ALIGN16( float temp[4]; )
 
 		temp[0] = lightDir0[0] * lightDir0[0];
 		temp[1] = lightDir0[1] * lightDir0[1];
@@ -17486,7 +17549,7 @@ idSIMD_SSE::MixSoundTwoSpeakerMono
 void VPCALL idSIMD_SSE::MixSoundTwoSpeakerMono( float *mixBuffer, const float *samples, const int numSamples, const float lastV[2], const float currentV[2] ) {
 #if 1
 
-	ALIGN16( float incs[2] );
+	ALIGN16( float incs[2]; )
 
 	assert( numSamples == MIXBUFFER_SAMPLES );
 
@@ -17589,7 +17652,7 @@ idSIMD_SSE::MixSoundTwoSpeakerStereo
 void VPCALL idSIMD_SSE::MixSoundTwoSpeakerStereo( float *mixBuffer, const float *samples, const int numSamples, const float lastV[2], const float currentV[2] ) {
 #if 1
 
-	ALIGN16( float incs[2] );
+	ALIGN16( float incs[2]; )
 
 	assert( numSamples == MIXBUFFER_SAMPLES );
 
@@ -17688,7 +17751,7 @@ idSIMD_SSE::MixSoundSixSpeakerMono
 void VPCALL idSIMD_SSE::MixSoundSixSpeakerMono( float *mixBuffer, const float *samples, const int numSamples, const float lastV[6], const float currentV[6] ) {
 #if 1
 
-	ALIGN16( float incs[6] );
+	ALIGN16( float incs[6]; )
 
 	assert( numSamples == MIXBUFFER_SAMPLES );
 
@@ -17858,7 +17921,7 @@ idSIMD_SSE::MixSoundSixSpeakerStereo
 void VPCALL idSIMD_SSE::MixSoundSixSpeakerStereo( float *mixBuffer, const float *samples, const int numSamples, const float lastV[6], const float currentV[6] ) {
 #if 1
 
-	ALIGN16( float incs[6] );
+	ALIGN16( float incs[6]; )
 
 	assert( numSamples == MIXBUFFER_SAMPLES );
 	assert( SPEAKER_RIGHT == 1 );
@@ -18083,5 +18146,9 @@ void VPCALL idSIMD_SSE::MixedSoundToSamples( short *samples, const float *mixBuf
 
 #endif
 }
+
+//HUMANHEAD rww - disable this since all the code is pushing ebx before modifying it
+#pragma warning(default:4731) //warning C4731: 'x' : frame pointer register 'ebx' modified by inline assembly code
+//HUMANHEAD END
 
 #endif /* _WIN32 */
